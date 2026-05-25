@@ -220,6 +220,7 @@ function leaveGroup(){
   document.querySelectorAll('.tab')[0].click();
   setStatus('準備完了');
   document.getElementById('lastUpdated').textContent='';
+  document.getElementById('shiftContent').innerHTML='<div class="empty-state">「更新」を押してシフトを読み込む</div>';
 }
 
 // ===== API =====
