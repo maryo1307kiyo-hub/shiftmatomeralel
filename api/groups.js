@@ -4,8 +4,8 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
-  const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
+  const UPSTASH_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
+  const UPSTASH_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 
   if (!UPSTASH_URL || !UPSTASH_TOKEN) {
     return res.status(500).json({ error: 'DB not configured' });
