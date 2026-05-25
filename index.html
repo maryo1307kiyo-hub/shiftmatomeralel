@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>シフト一覧</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');
+    :root {
+      --bg:#0d0d12;--surface:#16161f;--border:#1f1f2e;
+      --accent:#6aabf0;--accent2:#f06a6a;--text:#e0e0ee;--muted:#555566;
+    }
+    *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+    html,body{min-height:100%;font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text);font-size:15px}
+
+    /* ヘッダー */
+    .header{position:sticky;top:0;z-index:100;background:var(--bg);border-bottom:1px solid var(--border);padding:12px 16px;display:flex;align-items:center;justify-content:space-between}
+    .header-title{font-size:15px;font-weight:700;color:var(--accent)}
+    .header-actions{display:flex;gap:8px}
+
+    /* ボタン */
+    .btn{background:var(--accent);color:#0d0d12;border:none;border-radius:8px;font-family:inherit;font-size:14px;font-weight:700;padding:10px 18px;cursor:pointer;transition:opacity .2s;width:100%}
+    .btn:active{opacity:.7}
+    .btn:disabled{opacity:.35}
+    .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;font-family:inherit;font-size:13px;padding:7px 14px;cursor:pointer}
+    .btn-ghost:active{border-color:var(--accent);color:var(--accent)}
+    .btn-sm{width:auto;padding:6px 14px;font-size:12px}
+    .btn-danger{background:transparent;border:1px solid var(--accent2);color:var(--accent2);border-radius:6px;font-family:inherit;font-size:12px;padding:4px 10px;cursor:pointer}
+
+    /* タブ */
+    .tabs{display:flex;border-bottom:1px solid var(--border);position:sticky;top:53px;z-index:99;background:var(--bg)}
+    .tab{flex:1;text-align:center;padding:10px;font-size:13px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;font-weight:500}
+    .tab.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:700}
+
+    .view{display:none}.view.active{display:block}
+    .main{padding-bottom:80px}
+
+    /* グループ画面 */
+    .group-screen{padding:32px 20px;display:flex;flex-direction:column;gap:16px;max-width:400px;margin:0 auto}
+    .screen-title{font-size:20px;font-weight:700;color:var(--accent);text-align:center;margin-bottom:8px}
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px;display:flex;flex-direction:column;gap:12px}
+    .card-label{font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.1em}
+    .divider{text-align:center;color:var(--muted);font-size:13px;padding:4px 0}
+
+    /* フォーム */
+    input{background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:15px;padding:10px 12px;outline:none;width:100%;-webkit-appearance:none}
+    input:focus{border-color:var(--accent)}
+
+    /* 設定タブ */
+    .settings-section{padding:16px;display:flex;flex-direction:column;gap:16px}
+    .section{display:flex;flex-direction:column;gap:8px}
+    .section-label{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.1em;text-transform:uppercase}
+    .group-info{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between}
+    .group-id-text{font-weight:700;color:var(--accent);letter-spacing:.12em;font-size:15px}
+    .member-list{display:flex;flex-direction:column;gap:8px}
+    .member-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;display:flex;align-items:center;gap:10px}
+    .member-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+    .member-info{flex:1;overflow:hidden}
+    .member-name{font-weight:700;font-size:14px}
+    .member-url{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px}
+
+    /* シフト */
+    .loading{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 0;gap:14px;color:var(--muted);font-size:13px}
+    .spinner{width:28px;height:28px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .empty-state{text-align:center;padding:60px 24px;color:var(--muted);font-size:14px;line-height:2}
+    .month-divider{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.1em;padding:16px 16px 6px}
+    .date-block{padding:0 16px}
+    .date-row{display:flex;align-items:center;padding:8px 0 4px;border-bottom:1px solid var(--border)}
+    .date-tag{font-size:14px;font-weight:700;min-width:96px;color:var(--text)}
+    .date-tag.sat{color:#6aabf0}.date-tag.sun{color:#f07070}
+    .shift-pills{display:flex;flex-wrap:wrap;gap:4px;flex:1}
+    .shift-pill{display:flex;align-items:center;gap:5px;border-radius:6px;padding:3px 8px}
+    .pill-name{font-size:11px;font-weight:700}
+    .pill-time{font-size:12px;color:#999;font-variant-numeric:tabular-nums}
+
+    .c0{color:#6aabf0}.c1{color:#f0a06a}.c2{color:#6af0a0}.c3{color:#c06af0}.c4{color:#f0e06a}.c5{color:#f06aa0}.c6{color:#6ae0f0}.c7{color:#a0f06a}
+    .bg0{background:#6aabf018}.bg1{background:#f0a06a18}.bg2{background:#6af0a018}.bg3{background:#c06af018}.bg4{background:#f0e06a18}.bg5{background:#f06aa018}.bg6{background:#6ae0f018}.bg7{background:#a0f06a18}
+
+    .status-bar{position:fixed;bottom:0;left:0;right:0;background:var(--bg);border-top:1px solid var(--border);padding:8px 16px;display:flex;justify-content:space-between;font-size:11px;color:var(--muted);z-index:98}
+    .toast{position:fixed;bottom:40px;left:50%;transform:translateX(-50%);background:#222233;color:var(--text);font-size:13px;padding:10px 20px;border-radius:20px;border:1px solid var(--border);z-index:999;pointer-events:none;opacity:0;transition:opacity .3s;white-space:nowrap}
+    .toast.show{opacity:1}
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <span class="header-title">📋 シフト一覧</span>
+  <div class="header-actions">
+    <button class="btn-ghost btn-sm" id="fetchBtn" style="display:none" onclick="fetchAll()">更新</button>
+    <button class="btn-ghost btn-sm" id="leaveBtn" style="display:none" onclick="leaveGroup()">退出</button>
+  </div>
+</div>
+
+<div class="tabs" id="tabs" style="display:none">
+  <div class="tab active" data-tab="shifts">シフト</div>
+  <div class="tab" data-tab="settings">メンバー設定</div>
+</div>
+
+<div class="main">
+
+  <!-- グループ画面 -->
+  <div id="groupScreen">
+    <div class="group-screen">
+      <div class="screen-title">シフト一覧</div>
+
+      <div class="card">
+        <div class="card-label">新しいグループを作る</div>
+        <input type="text" id="newGroupId" placeholder="グループID（例: maverick2026）" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+        <div style="font-size:11px;color:var(--muted);">英数字で自由に決めてOK。同じIDを使えば全員同じグループに入れる。</div>
+        <button class="btn" onclick="createGroup()">グループを作る</button>
+      </div>
+
+      <div class="divider">— すでにグループIDがある場合 —</div>
+
+      <div class="card">
+        <div class="card-label">グループに参加する</div>
+        <input type="text" id="joinGroupId" placeholder="グループID" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+        <button class="btn" onclick="joinGroup()">参加する</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- アプリ画面 -->
+  <div id="appScreen" style="display:none">
+    <div class="view active" id="view-shifts">
+      <div id="shiftContent">
+        <div class="empty-state">「更新」を押してシフトを読み込む<br><span style="font-size:12px">先にメンバー設定でURLを登録してね</span></div>
+      </div>
+    </div>
+
+    <div class="view" id="view-settings">
+      <div class="settings-section">
+
+        <div class="section">
+          <div class="section-label">グループID</div>
+          <div class="group-info">
+            <span class="group-id-text" id="groupIdDisplay"></span>
+            <button class="btn-ghost btn-sm" onclick="copyGroupId()">IDコピー</button>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-label">メンバー追加</div>
+          <div class="card">
+            <div>
+              <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">あだ名</div>
+              <input type="text" id="nameInput" placeholder="サチャン" maxlength="20" autocomplete="off">
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">シフトURL（ciftr.jp）</div>
+              <input type="url" id="urlInput" placeholder="https://m-s1.ciftr.jp/staff/index?s=..." autocomplete="off" autocorrect="off" autocapitalize="off">
+            </div>
+            <button class="btn" onclick="addMember()">追加する</button>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-label">登録済みメンバー</div>
+          <div class="member-list" id="memberList">
+            <div style="font-size:13px;color:var(--muted);">まだ登録されていません</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="status-bar">
+  <span id="statusText">準備完了</span>
+  <span id="lastUpdated"></span>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const DAY=['日','月','火','水','木','金','土'];
+const C=['c0','c1','c2','c3','c4','c5','c6','c7'];
+const BG=['bg0','bg1','bg2','bg3','bg4','bg5','bg6','bg7'];
+let members=[], groupId=null;
+
+// ===== グループ =====
+function createGroup(){
+  const id = document.getElementById('newGroupId').value.trim();
+  if(!id){ showToast('グループIDを入力してください'); return; }
+  if(!/^[a-zA-Z0-9_-]+$/.test(id)){ showToast('英数字・ハイフン・アンダーバーのみ使えます'); return; }
+  enterGroup(id);
+}
+
+function joinGroup(){
+  const id = document.getElementById('joinGroupId').value.trim();
+  if(!id){ showToast('グループIDを入力してください'); return; }
+  enterGroup(id);
+}
+
+async function enterGroup(id){
+  groupId = id;
+  localStorage.setItem('shiftGroupId', id);
+  document.getElementById('groupScreen').style.display='none';
+  document.getElementById('appScreen').style.display='block';
+  document.getElementById('tabs').style.display='flex';
+  document.getElementById('fetchBtn').style.display='inline-block';
+  document.getElementById('leaveBtn').style.display='inline-block';
+  document.getElementById('groupIdDisplay').textContent=id;
+  setStatus('メンバーを読み込み中...');
+  await loadMembers();
+  if(members.length>0) fetchAll();
+  else setStatus('メンバーを登録してください');
+}
+
+function leaveGroup(){
+  localStorage.removeItem('shiftGroupId');
+  groupId=null; members=[];
+  document.getElementById('groupScreen').style.display='block';
+  document.getElementById('appScreen').style.display='none';
+  document.getElementById('tabs').style.display='none';
+  document.getElementById('fetchBtn').style.display='none';
+  document.getElementById('leaveBtn').style.display='none';
+  document.querySelectorAll('.tab')[0].click();
+  setStatus('準備完了');
+  document.getElementById('lastUpdated').textContent='';
+}
+
+// ===== API =====
+async function loadMembers(){
+  try{
+    const r=await fetch(`/api/groups?groupId=${encodeURIComponent(groupId)}`);
+    const d=await r.json();
+    members=d.members||[];
+    renderMembers();
+    setStatus('準備完了');
+  }catch(e){ showToast('読み込みに失敗しました'); }
+}
+
+async function addMember(){
+  const name=document.getElementById('nameInput').value.trim();
+  const url=document.getElementById('urlInput').value.trim();
+  if(!name||!url){ showToast('名前とURLを入力してください'); return; }
+  if(!url.includes('ciftr.jp')){ showToast('ciftr.jpのURLを入力してください'); return; }
+  try{
+    const r=await fetch(`/api/groups?groupId=${encodeURIComponent(groupId)}&action=add`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({name,url})
+    });
+    const d=await r.json();
+    if(d.error){ showToast(d.error==='already exists'?'このURLは登録済みです':d.error); return; }
+    members=d.members;
+    document.getElementById('nameInput').value='';
+    document.getElementById('urlInput').value='';
+    renderMembers();
+    showToast(`${name} を追加しました ✓`);
+  }catch(e){ showToast('追加に失敗しました'); }
+}
+
+async function removeMember(url,name){
+  try{
+    const r=await fetch(`/api/groups?groupId=${encodeURIComponent(groupId)}&action=remove`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({url})
+    });
+    const d=await r.json();
+    members=d.members;
+    renderMembers();
+    showToast(`${name} を削除しました`);
+  }catch(e){ showToast('削除に失敗しました'); }
+}
+
+// ===== シフト取得 =====
+async function fetchAll(){
+  if(!members.length){ showToast('先にメンバーを設定してください'); return; }
+  document.getElementById('fetchBtn').disabled=true;
+  setStatus(`${members.length}人分を取得中...`);
+  document.getElementById('shiftContent').innerHTML=`<div class="loading"><div class="spinner"></div><span>${members.length}人分を取得中...</span></div>`;
+  document.querySelectorAll('.tab')[0].click();
+  const results=await Promise.all(members.map((m,i)=>fetchOne(m,i)));
+  document.getElementById('fetchBtn').disabled=false;
+  renderShifts(results);
+  const ok=results.filter(r=>!r.error).length;
+  setStatus(`${ok}/${members.length}人 取得完了`);
+  const now=new Date();
+  document.getElementById('lastUpdated').textContent=`${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')} 更新`;
+}
+
+async function fetchOne(member,idx){
+  try{
+    const r=await fetch(`/api/fetch-shift?url=${encodeURIComponent(member.url)}`);
+    if(!r.ok) throw new Error(`HTTP ${r.status}`);
+    const d=await r.json();
+    if(d.error) throw new Error(d.error);
+    return{name:member.name,colorIdx:idx,...d};
+  }catch(e){
+    return{name:member.name,colorIdx:idx,error:e.message,shifts:[]};
+  }
+}
+
+// ===== 描画 =====
+function renderMembers(){
+  const list=document.getElementById('memberList');
+  if(!members.length){ list.innerHTML='<div style="font-size:13px;color:var(--muted);">まだ登録されていません</div>'; return; }
+  list.innerHTML=members.map((m,i)=>`
+    <div class="member-card">
+      <div class="member-dot" style="background:var(--accent)"></div>
+      <div class="member-info">
+        <div class="member-name ${C[i%8]}">${esc(m.name)}</div>
+        <div class="member-url">${esc(m.url)}</div>
+      </div>
+      <button class="btn-danger" onclick="removeMember('${esc(m.url)}','${esc(m.name)}')">削除</button>
+    </div>`).join('');
+}
+
+function renderShifts(results){
+  const byDate={};
+  for(const m of results){
+    if(!m.shifts) continue;
+    for(const s of m.shifts){
+      if(!byDate[s.date]) byDate[s.date]=[];
+      byDate[s.date].push({...s,name:m.name,colorIdx:m.colorIdx});
+    }
+  }
+  const dates=Object.keys(byDate).sort();
+  if(!dates.length){ document.getElementById('shiftContent').innerHTML='<div class="empty-state">シフトが見つかりませんでした</div>'; return; }
+  let html='', cur=null;
+  for(const date of dates){
+    const d=new Date(date+'T00:00:00'), mo=d.getMonth()+1, dow=d.getDay();
+    if(mo!==cur){ html+=`<div class="month-divider">${d.getFullYear()}年 ${mo}月</div>`; cur=mo; }
+    const dc=dow===0?'sun':dow===6?'sat':'';
+    const pills=byDate[date].sort((a,b)=>a.start.localeCompare(b.start)).map(s=>{
+      const c=C[s.colorIdx%8], bg=BG[s.colorIdx%8];
+      return `<div class="shift-pill ${bg}"><span class="pill-name ${c}">${esc(s.name)}</span><span class="pill-time">${esc(s.start)}–${esc(s.end)}</span></div>`;
+    }).join('');
+    html+=`<div class="date-block"><div class="date-row"><span class="date-tag ${dc}">${mo}/${d.getDate()}（${DAY[dow]}）</span><div class="shift-pills">${pills}</div></div></div>`;
+  }
+  document.getElementById('shiftContent').innerHTML=html;
+}
+
+// ===== ユーティリティ =====
+function copyGroupId(){
+  navigator.clipboard.writeText(groupId).then(()=>showToast('グループIDをコピーしました！'));
+}
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2500); }
+function setStatus(t){ document.getElementById('statusText').textContent=t; }
+
+// タブ
+document.querySelectorAll('.tab').forEach(tab=>{
+  tab.addEventListener('click',()=>{
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('view-'+tab.dataset.tab).classList.add('active');
+  });
+});
+
+// 起動: 前回のグループIDが保存されていれば自動で入る
+const savedId=localStorage.getItem('shiftGroupId');
+if(savedId) enterGroup(savedId);
+</script>
+</body>
+</html>

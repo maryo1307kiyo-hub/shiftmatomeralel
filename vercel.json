@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/api/fetch-shift", "destination": "/api/fetch-shift.js" },
+    { "source": "/", "destination": "/index.html" }
+  ]
+}
