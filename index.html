@@ -66,6 +66,8 @@
     .empty-state{text-align:center;padding:60px 24px;color:var(--muted);font-size:14px;line-height:2}
     .month-divider{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.1em;padding:16px 16px 6px}
     .date-block{padding:0 16px}
+    .date-block--highlight{background:rgba(106,171,240,0.08);border-radius:8px;margin:2px 8px;padding:0 8px;}
+    .date-block--highlight .date-row{border-bottom-color:#6aabf033;}
     .date-row{display:flex;align-items:center;padding:8px 0 4px;border-bottom:1px solid var(--border)}
     .date-tag{font-size:14px;font-weight:700;min-width:96px;color:var(--text)}
     .date-tag.sat{color:#6aabf0}.date-tag.sun{color:#f07070}
@@ -321,16 +323,22 @@ function renderShifts(results){
   }
   const dates=Object.keys(byDate).sort();
   if(!dates.length){ document.getElementById('shiftContent').innerHTML='<div class="empty-state">シフトが見つかりませんでした</div>'; return; }
+
+  // 人数上位3日を取得
+  const sorted=[...dates].sort((a,b)=>byDate[b].length-byDate[a].length);
+  const top3=new Set(sorted.slice(0,3));
+
   let html='', cur=null;
   for(const date of dates){
     const d=new Date(date+'T00:00:00'), mo=d.getMonth()+1, dow=d.getDay();
     if(mo!==cur){ html+=`<div class="month-divider">${d.getFullYear()}年 ${mo}月</div>`; cur=mo; }
     const dc=dow===0?'sun':dow===6?'sat':'';
+    const highlight=top3.has(date)?'date-block--highlight':'';
     const pills=byDate[date].sort((a,b)=>a.start.localeCompare(b.start)).map(s=>{
       const c=C[s.colorIdx%8], bg=BG[s.colorIdx%8];
       return `<div class="shift-pill ${bg}"><span class="pill-name ${c}">${esc(s.name)}</span><span class="pill-time">${esc(s.start)}–${esc(s.end)}</span></div>`;
     }).join('');
-    html+=`<div class="date-block"><div class="date-row"><span class="date-tag ${dc}">${mo}/${d.getDate()}（${DAY[dow]}）</span><div class="shift-pills">${pills}</div></div></div>`;
+    html+=`<div class="date-block ${highlight}"><div class="date-row"><span class="date-tag ${dc}">${mo}/${d.getDate()}（${DAY[dow]}）</span><div class="shift-pills">${pills}</div></div></div>`;
   }
   document.getElementById('shiftContent').innerHTML=html;
 }
