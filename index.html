@@ -79,6 +79,10 @@
     .c0{color:#6aabf0}.c1{color:#f0a06a}.c2{color:#6af0a0}.c3{color:#c06af0}.c4{color:#f0e06a}.c5{color:#f06aa0}.c6{color:#6ae0f0}.c7{color:#a0f06a}
     .bg0{background:#6aabf018}.bg1{background:#f0a06a18}.bg2{background:#6af0a018}.bg3{background:#c06af018}.bg4{background:#f0e06a18}.bg5{background:#f06aa018}.bg6{background:#6ae0f018}.bg7{background:#a0f06a18}
 
+    .pill-pending{border:1px dashed #f0a06a;background:transparent!important;}
+    .pill-pending .pill-name{color:#f0a06a!important;}
+    .pill-pending .pill-time{color:#f0a06a88;}
+    .pill-pending .pill-label{font-size:9px;color:#f0a06a;border:1px solid #f0a06a;border-radius:3px;padding:0 3px;margin-right:2px;}
     .status-bar{position:fixed;bottom:0;left:0;right:0;background:var(--bg);border-top:1px solid var(--border);padding:8px 16px;display:flex;justify-content:space-between;font-size:11px;color:var(--muted);z-index:98}
     .toast{position:fixed;bottom:40px;left:50%;transform:translateX(-50%);background:#222233;color:var(--text);font-size:13px;padding:10px 20px;border-radius:20px;border:1px solid var(--border);z-index:999;pointer-events:none;opacity:0;transition:opacity .3s;white-space:nowrap}
     .toast.show{opacity:1}
@@ -315,17 +319,30 @@ function renderMembers(){
 function renderShifts(results){
   const byDate={};
   for(const m of results){
-    if(!m.shifts) continue;
-    for(const s of m.shifts){
-      if(!byDate[s.date]) byDate[s.date]=[];
-      byDate[s.date].push({...s,name:m.name,colorIdx:m.colorIdx});
+    // 確定シフト
+    if(m.shifts){
+      for(const s of m.shifts){
+        if(!byDate[s.date]) byDate[s.date]=[];
+        byDate[s.date].push({...s,name:m.name,colorIdx:m.colorIdx,pending:false});
+      }
+    }
+    // 申請シフト
+    if(m.pendingShifts){
+      for(const s of m.pendingShifts){
+        if(!byDate[s.date]) byDate[s.date]=[];
+        byDate[s.date].push({...s,name:m.name,colorIdx:m.colorIdx,pending:true});
+      }
     }
   }
   const dates=Object.keys(byDate).sort();
   if(!dates.length){ document.getElementById('shiftContent').innerHTML='<div class="empty-state">シフトが見つかりませんでした</div>'; return; }
 
-  // 人数上位3日を取得
-  const sorted=[...dates].sort((a,b)=>byDate[b].length-byDate[a].length);
+  // 確定シフトの人数で上位3日を取得
+  const sorted=[...dates].sort((a,b)=>{
+    const ac=byDate[a].filter(s=>!s.pending).length;
+    const bc=byDate[b].filter(s=>!s.pending).length;
+    return bc-ac;
+  });
   const top3=new Set(sorted.slice(0,3));
 
   let html='', cur=null;
@@ -333,9 +350,12 @@ function renderShifts(results){
     const d=new Date(date+'T00:00:00'), mo=d.getMonth()+1, dow=d.getDay();
     if(mo!==cur){ html+=`<div class="month-divider">${d.getFullYear()}年 ${mo}月</div>`; cur=mo; }
     const dc=dow===0?'sun':dow===6?'sat':'';
-    const highlight=top3.has(date)?'date-block--highlight':'';
+    const highlight=top3.has(date)&&byDate[date].some(s=>!s.pending)?'date-block--highlight':'';
     const pills=byDate[date].sort((a,b)=>a.start.localeCompare(b.start)).map(s=>{
       const c=C[s.colorIdx%8], bg=BG[s.colorIdx%8];
+      if(s.pending){
+        return `<div class="shift-pill pill-pending"><span class="pill-label">申</span><span class="pill-name">${esc(s.name)}</span><span class="pill-time">${esc(s.start)}–${esc(s.end)}</span></div>`;
+      }
       return `<div class="shift-pill ${bg}"><span class="pill-name ${c}">${esc(s.name)}</span><span class="pill-time">${esc(s.start)}–${esc(s.end)}</span></div>`;
     }).join('');
     html+=`<div class="date-block ${highlight}"><div class="date-row"><span class="date-tag ${dc}">${mo}/${d.getDate()}（${DAY[dow]}）</span><div class="shift-pills">${pills}</div></div></div>`;
