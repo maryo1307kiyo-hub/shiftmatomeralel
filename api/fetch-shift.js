@@ -8,28 +8,51 @@ export default async function handler(req, res) {
   if (!url) return res.status(400).json({ error: 'url required' });
   if (!url.includes('ciftr.jp')) return res.status(403).json({ error: 'ciftr.jp only' });
 
-  try {
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
-        'Accept': 'text/html,application/xhtml+xml',
-        'Accept-Language': 'ja,en-US;q=0.9',
-      }
-    });
-    if (!response.ok) return res.status(response.status).json({ error: `HTTP ${response.status}` });
+  const headers = {
+    'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
+    'Accept': 'text/html,application/xhtml+xml',
+    'Accept-Language': 'ja,en-US;q=0.9',
+  };
 
-    const html = await response.text();
-    const shifts = parseShiftHTML(html);
-    return res.status(200).json(shifts);
+  try {
+    // 確定シフト取得
+    const confirmedRes = await fetch(url, { headers });
+    if (!confirmedRes.ok) return res.status(confirmedRes.status).json({ error: `HTTP ${confirmedRes.status}` });
+    const confirmedHtml = await confirmedRes.text();
+    const { shifts: confirmedShifts, year, month } = parseConfirmedHTML(confirmedHtml);
+
+    // 申請シフト取得（s=パラメータを使って bulk_edit URLを生成）
+    const sParam = url.match(/[?&]s=([^&]+)/)?.[1];
+    let pendingShifts = [];
+    if (sParam) {
+      const bulkUrl = `https://m-s1.ciftr.jp/shift/bulk_edit?s=${sParam}`;
+      try {
+        const pendingRes = await fetch(bulkUrl, { headers });
+        if (pendingRes.ok) {
+          const pendingHtml = await pendingRes.text();
+          pendingShifts = parsePendingHTML(pendingHtml, year, month);
+        }
+      } catch(e) { /* 申請シフト取得失敗は無視 */ }
+    }
+
+    // 確定シフトの日付セット
+    const confirmedDates = new Set(confirmedShifts.map(s => s.date));
+
+    // 申請シフトから確定済みを除外
+    const pendingOnly = pendingShifts.filter(s => !confirmedDates.has(s.date));
+
+    return res.status(200).json({
+      shifts: confirmedShifts,
+      pendingShifts: pendingOnly,
+      year, month
+    });
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }
 }
 
-function parseShiftHTML(html) {
+function parseConfirmedHTML(html) {
   const shifts = [];
-
-  // タグを除去してテキストだけ残す
   const text = html
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/?(div|p|li|tr|td|th)[^>]*>/gi, '\n')
@@ -40,29 +63,21 @@ function parseShiftHTML(html) {
     .replace(/&gt;/g, '>');
 
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-
   let year = new Date().getFullYear();
   let month = null;
 
   for (const line of lines) {
-    // 年月パターン
     const ymMatch = line.match(/(\d{4})年\s*(\d{1,2})月/);
     if (ymMatch) { year = parseInt(ymMatch[1]); month = parseInt(ymMatch[2]); continue; }
-
-    // 月だけのパターン（例: "5月" "6月"）
     const mOnly = line.match(/^(\d{1,2})月$/);
     if (mOnly) {
       month = parseInt(mOnly[1]);
       if (month === 1 && new Date().getMonth() === 11) year++;
       continue;
     }
-
-    // 日付行パターン: "16日(土) 11:00-19:00" or "16日(土)"
-    // 全角・半角括弧両対応、スペース・全角スペース対応
     const dayMatch = line.match(/^(\d{1,2})日[（(][月火水木金土日][）)][\s　]*([\d:]+[-–ー][\d:]+)?/);
     if (dayMatch && month !== null && dayMatch[2]) {
-      const timeStr = dayMatch[2].trim();
-      const parts = timeStr.split(/[-–ー]/);
+      const parts = dayMatch[2].trim().split(/[-–ー]/);
       if (parts.length >= 2) {
         shifts.push({
           date: `${year}-${String(month).padStart(2,'0')}-${String(parseInt(dayMatch[1])).padStart(2,'0')}`,
@@ -73,4 +88,50 @@ function parseShiftHTML(html) {
     }
   }
   return { shifts, year, month };
+}
+
+function parsePendingHTML(html, baseYear, baseMonth) {
+  const shifts = [];
+  const text = html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/?(div|p|li|tr|td|th|input)[^>]*>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
+
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  let year = baseYear || new Date().getFullYear();
+  let month = baseMonth || null;
+
+  for (const line of lines) {
+    const ymMatch = line.match(/(\d{4})年\s*(\d{1,2})月/);
+    if (ymMatch) { year = parseInt(ymMatch[1]); month = parseInt(ymMatch[2]); continue; }
+    const mOnly = line.match(/^(\d{1,2})月$/);
+    if (mOnly) {
+      month = parseInt(mOnly[1]);
+      if (month === 1 && new Date().getMonth() === 11) year++;
+      continue;
+    }
+
+    // 申請ページ: "20日(土) 1300 1700" or "20日(土)1300 1700"
+    // 時間フォーマットが "1300 1700"（スペース区切り、コロンなし）
+    const dayMatch = line.match(/^(\d{1,2})日[（(][月火水木金土日][）)][\s　]*(\d{3,4})\s+(\d{3,4})/);
+    if (dayMatch && month !== null) {
+      const start = formatTime(dayMatch[2]);
+      const end = formatTime(dayMatch[3]);
+      shifts.push({
+        date: `${year}-${String(month).padStart(2,'0')}-${String(parseInt(dayMatch[1])).padStart(2,'0')}`,
+        start, end
+      });
+    }
+  }
+  return shifts;
+}
+
+function formatTime(t) {
+  // "1300" -> "13:00", "930" -> "9:30"
+  const s = t.padStart(4, '0');
+  return `${parseInt(s.slice(0,2))}:${s.slice(2)}`;
 }
