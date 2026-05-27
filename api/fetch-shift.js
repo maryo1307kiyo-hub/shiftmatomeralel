@@ -92,9 +92,15 @@ function parseConfirmedHTML(html) {
 
 function parsePendingHTML(html, baseYear, baseMonth) {
   const shifts = [];
+  let year = baseYear || new Date().getFullYear();
+  let month = baseMonth || null;
+
+  // inputタグのvalue属性を日付行と一緒に抽出
+  // HTMLを行ごとに処理してinputのvalueを保持する
   const text = html
+    .replace(/<input[^>]*value=["'](\d{3,4}\s+\d{3,4})["'][^>]*>/gi, (m, val) => ` ${val}`)
     .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/?(div|p|li|tr|td|th|input)[^>]*>/gi, '\n')
+    .replace(/<\/?(div|p|li|tr|td|th)[^>]*>/gi, '\n')
     .replace(/<[^>]+>/g, '')
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')
@@ -102,8 +108,6 @@ function parsePendingHTML(html, baseYear, baseMonth) {
     .replace(/&gt;/g, '>');
 
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-  let year = baseYear || new Date().getFullYear();
-  let month = baseMonth || null;
 
   for (const line of lines) {
     const ymMatch = line.match(/(\d{4})年\s*(\d{1,2})月/);
@@ -115,8 +119,7 @@ function parsePendingHTML(html, baseYear, baseMonth) {
       continue;
     }
 
-    // 申請ページ: "20日(土) 1300 1700" or "20日(土)1300 1700"
-    // 時間フォーマットが "1300 1700"（スペース区切り、コロンなし）
+    // "25日(木) 1530 1900" パターン
     const dayMatch = line.match(/^(\d{1,2})日[（(][月火水木金土日][）)][\s　]*(\d{3,4})\s+(\d{3,4})/);
     if (dayMatch && month !== null) {
       const start = formatTime(dayMatch[2]);
