@@ -84,7 +84,7 @@ function shouldRefresh(cachedAt) {
   return cachedPeriod !== nowPeriod;
 }
 
-function function getPeriod(date) {
+function getPeriod(date) {
   const y = date.getFullYear();
   const m = date.getMonth();
   const d = date.getDate();
