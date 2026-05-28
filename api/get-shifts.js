@@ -84,12 +84,14 @@ function shouldRefresh(cachedAt) {
   return cachedPeriod !== nowPeriod;
 }
 
-function getPeriod(date) {
+function function getPeriod(date) {
   const y = date.getFullYear();
   const m = date.getMonth();
-  const half = date.getDate() <= 15 ? 0 : 1;
+  const d = date.getDate();
+  const half = d <= 6 ? 0 : d <= 21 ? 1 : 2;
   return `${y}-${m}-${half}`;
 }
+
 
 function getBaseUrl(req) {
   const proto = req.headers['x-forwarded-proto'] || 'https';
