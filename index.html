@@ -417,11 +417,16 @@ function renderShifts(results){
 }
 
 // ===== ユーティリティ =====
-function copyGroupId(){
+  function copyGroupId(){
   const url=`${location.origin}${location.pathname}?g=${groupId}`;
   const text=`しふとまとめれ～るに招待します！\nグループID: ${groupId}\n${url}`;
-  navigator.clipboard.writeText(text).then(()=>showToast('招待リンクをコピーしました！'));
+  if(navigator.share){
+    navigator.share({ title:'しふとまとめれ～る', text });
+  } else {
+    navigator.clipboard.writeText(text).then(()=>showToast('招待リンクをコピーしました！'));
+  }
 }
+
 
 
 function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
