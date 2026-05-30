@@ -343,7 +343,7 @@ async function fetchAll(force=false){
 
     const ok=(d.results||[]).filter(r=>!r.error).length;
     const total=(d.results||[]).length;
-    const cacheLabel=d.fromCache?' (キャッシュ)':'';
+    const cacheLabel=d.fromCache?' ':'';
     setStatus(`${ok}/${total}人 取得完了${cacheLabel}`);
 
     const t=d.cachedAt?new Date(d.cachedAt):new Date();
@@ -418,8 +418,15 @@ function renderShifts(results){
 
 // ===== ユーティリティ =====
 function copyGroupId(){
-  navigator.clipboard.writeText(groupId).then(()=>showToast('グループIDをコピーしました！'));
+  const url=`${location.origin}${location.pathname}?g=${groupId}`;
+  const text=`しふとまとめれ～るに招待する\nグループID: ${groupId}\n${url}`;
+  if(navigator.share){
+    navigator.share({ title:'しふとまとめれ～る', text });
+  } else {
+    navigator.clipboard.writeText(text).then(()=>showToast('招待リンクをコピーしました！'));
+  }
 }
+
 function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2500); }
 function setStatus(t){ document.getElementById('statusText').textContent=t; }
