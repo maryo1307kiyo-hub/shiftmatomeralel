@@ -12,7 +12,7 @@
       --text:#c8c8e0;--muted:#444466;--px:2px;
     }
     *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-    html,body{min-height:100%;font-family:'DotGothic16',monospace;background:var(--bg);color:var(--text);font-size:14px}
+    html,body{min-height:100vh;font-family:'DotGothic16',monospace;background:var(--bg);color:var(--text);font-size:14px}
 
     body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(circle,#ffffff06 1px,transparent 1px);background-size:16px 16px;pointer-events:none;z-index:0}
     *{position:relative;z-index:1}
@@ -217,7 +217,7 @@ const DAY=['日','月','火','水','木','金','土'];
 const C=['c0','c1','c2','c3','c4','c5','c6','c7'];
 const BG=['bg0','bg1','bg2','bg3','bg4','bg5','bg6','bg7'];
 const LOADING_MSGS=['みんなのシフトを集めてるよ','もうちょっとだけ待ってね！','ciftrにアクセス中...','データを整理してるよ','あとちょっと！'];
-let members=[], groupId=null, loadingMsgTimer=null;
+let members=[], groupId=null, loadingMsgTimer=null, lastShiftData=null;
 
 // ===== グループ =====
 function createGroup(){
@@ -244,7 +244,11 @@ async function enterGroup(id){
   document.getElementById('groupIdDisplay').textContent=id;
   setStatus('メンバーを読み込み中...');
   await loadMembers();
-  if(members.length>0) fetchAll();
+  if(members.length>0){
+    fetchAll();
+    // 初回表示後にバックグラウンドで差分チェック
+    setTimeout(bgRefresh, 3000);
+  }
   else setStatus('メンバーを登録してください');
 }
 
@@ -340,10 +344,11 @@ async function fetchAll(force=false){
     clearInterval(loadingMsgTimer);
     document.getElementById('fetchBtn').disabled=false;
     renderShifts(d.results||[]);
+    lastShiftData=JSON.stringify((d.results||[]).map(r=>({name:r.name,shifts:r.shifts,pendingShifts:r.pendingShifts})));
 
     const ok=(d.results||[]).filter(r=>!r.error).length;
     const total=(d.results||[]).length;
-    const cacheLabel=d.fromCache?' ':'';
+    const cacheLabel=d.fromCache?' (キャッシュ)':'';
     setStatus(`${ok}/${total}人 取得完了${cacheLabel}`);
 
     const t=d.cachedAt?new Date(d.cachedAt):new Date();
@@ -354,6 +359,28 @@ async function fetchAll(force=false){
     document.getElementById('shiftContent').innerHTML='<div class="empty-state">取得に失敗しました</div>';
     setStatus('ERROR');
   }
+}
+
+// ===== バックグラウンド更新 =====
+async function bgRefresh(){
+  if(!groupId||!members.length) return;
+  try{
+    const r=await fetch(`/api/get-shifts?groupId=${encodeURIComponent(groupId)}&force=1`);
+    if(!r.ok) return;
+    const d=await r.json();
+    if(!d.results||d.fromCache) return;
+
+    // 差分チェック
+    const newData=JSON.stringify(d.results.map(r=>({name:r.name,shifts:r.shifts,pendingShifts:r.pendingShifts})));
+    if(newData===lastShiftData) return;
+
+    // 差分あり→更新
+    lastShiftData=newData;
+    renderShifts(d.results);
+    const t=new Date(d.cachedAt);
+    document.getElementById('lastUpdated').textContent=`${t.getMonth()+1}/${t.getDate()} ${t.getHours()}:${String(t.getMinutes()).padStart(2,'0')} 更新`;
+    showToast('シフトが更新されました！');
+  }catch(e){}
 }
 
 // ===== 描画 =====
@@ -417,15 +444,9 @@ function renderShifts(results){
 }
 
 // ===== ユーティリティ =====
-  function copyGroupId(){
-  const url=`${location.origin}${location.pathname}?g=${groupId}`;
-  const text=`しふとまとめれ～るに招待します！\nグループID: ${groupId}\n${url}`;
-  navigator.clipboard.writeText(text).then(()=>showToast('招待リンクをコピーしました！'));
+function copyGroupId(){
+  navigator.clipboard.writeText(groupId).then(()=>showToast('グループIDをコピーしました！'));
 }
-
-
-
-
 function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2500); }
 function setStatus(t){ document.getElementById('statusText').textContent=t; }
