@@ -419,13 +419,10 @@ function renderShifts(results){
 // ===== ユーティリティ =====
 function copyGroupId(){
   const url=`${location.origin}${location.pathname}?g=${groupId}`;
-  const text=`しふとまとめれ～るに招待する\nグループID: ${groupId}\n${url}`;
-  if(navigator.share){
-    navigator.share({ title:'しふとまとめれ～る', text });
-  } else {
-    navigator.clipboard.writeText(text).then(()=>showToast('招待リンクをコピーしました！'));
-  }
+  const text=`しふとまとめれ～るに招待します！\nグループID: ${groupId}\n${url}`;
+  navigator.clipboard.writeText(text).then(()=>showToast('招待リンクをコピーしました！'));
 }
+
 
 function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2500); }
