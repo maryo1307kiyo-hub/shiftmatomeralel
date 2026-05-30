@@ -420,12 +420,9 @@ function renderShifts(results){
   function copyGroupId(){
   const url=`${location.origin}${location.pathname}?g=${groupId}`;
   const text=`しふとまとめれ～るに招待します！\nグループID: ${groupId}\n${url}`;
-  if(navigator.share){
-    navigator.share({ title:'しふとまとめれ～る', text });
-  } else {
-    navigator.clipboard.writeText(text).then(()=>showToast('招待リンクをコピーしました！'));
-  }
+  navigator.clipboard.writeText(text).then(()=>showToast('招待リンクをコピーしました！'));
 }
+
 
 
 
