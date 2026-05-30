@@ -4,103 +4,135 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
   <title>しふとまとめれ～る</title>
+  <link href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Press+Start+2P&display=swap" rel="stylesheet">
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');
     :root {
-      --bg:#0d0d12;--surface:#16161f;--border:#1f1f2e;
-      --accent:#6aabf0;--accent2:#f06a6a;--text:#e0e0ee;--muted:#555566;
+      --bg:#0f0f22;--surface:#181830;--border:#2e2e50;
+      --accent:#5588cc;--accent2:#cc4455;--accent3:#44aa66;--accent4:#cc8833;
+      --text:#c8c8e0;--muted:#444466;--px:2px;
     }
     *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-    html,body{min-height:100%;font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text);font-size:15px}
+    html,body{min-height:100%;font-family:'DotGothic16',monospace;background:var(--bg);color:var(--text);font-size:14px}
+
+    body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(circle,#ffffff06 1px,transparent 1px);background-size:16px 16px;pointer-events:none;z-index:0}
+    *{position:relative;z-index:1}
 
     /* ヘッダー */
-    .header{position:sticky;top:0;z-index:100;background:var(--bg);border-bottom:1px solid var(--border);padding:12px 16px;display:flex;align-items:center;justify-content:space-between}
-    .header-title{font-size:15px;font-weight:700;color:var(--accent)}
+    .header{background:var(--surface);border-bottom:var(--px) solid var(--accent);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+    .logo{font-family:'Press Start 2P',monospace;font-size:8px;color:var(--accent);letter-spacing:.05em}
     .header-actions{display:flex;gap:8px}
 
     /* ボタン */
-    .btn{background:var(--accent);color:#0d0d12;border:none;border-radius:8px;font-family:inherit;font-size:14px;font-weight:700;padding:10px 18px;cursor:pointer;transition:opacity .2s;width:100%}
-    .btn:active{opacity:.7}
-    .btn:disabled{opacity:.35}
-    .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;font-family:inherit;font-size:13px;padding:7px 14px;cursor:pointer}
-    .btn-ghost:active{border-color:var(--accent);color:var(--accent)}
-    .btn-sm{width:auto;padding:6px 14px;font-size:12px}
-    .btn-danger{background:transparent;border:1px solid var(--accent2);color:var(--accent2);border-radius:6px;font-family:inherit;font-size:12px;padding:4px 10px;cursor:pointer}
+    .btn-px{font-family:'DotGothic16',monospace;font-size:13px;padding:6px 12px;border:none;cursor:pointer;transition:transform .08s}
+    .btn-px:active{transform:translate(2px,2px)}
+    .btn-px:disabled{opacity:.35}
+    .btn-primary{background:var(--accent);color:#fff;box-shadow:3px 3px 0 #2a4477;width:100%;padding:10px}
+    .btn-primary:active{box-shadow:1px 1px 0 #2a4477}
+    .btn-ghost{background:transparent;color:var(--accent);border:var(--px) solid var(--accent);box-shadow:3px 3px 0 #2a4477}
+    .btn-ghost:active{box-shadow:1px 1px 0 #2a4477}
+    .btn-sm{width:auto;padding:5px 11px;font-size:12px}
+    .btn-red{background:transparent;color:var(--accent2);border:var(--px) solid var(--accent2);box-shadow:3px 3px 0 #661122;font-size:11px;padding:4px 10px}
+    .btn-red:active{box-shadow:1px 1px 0 #661122}
 
     /* タブ */
-    .tabs{display:flex;border-bottom:1px solid var(--border);position:sticky;top:53px;z-index:99;background:var(--bg)}
-    .tab{flex:1;text-align:center;padding:10px;font-size:13px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;font-weight:500}
-    .tab.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:700}
+    .tabs{display:flex;background:var(--surface);border-bottom:var(--px) solid var(--border);position:sticky;top:45px;z-index:99}
+    .tab{flex:1;text-align:center;padding:10px;font-family:'DotGothic16',monospace;font-size:13px;color:var(--muted);cursor:pointer;border-bottom:calc(var(--px)*2) solid transparent}
+    .tab.active{color:var(--accent);border-bottom-color:var(--accent)}
 
     .view{display:none}.view.active{display:block}
     .main{padding-bottom:80px}
 
     /* グループ画面 */
-    .group-screen{padding:32px 20px;display:flex;flex-direction:column;gap:16px;max-width:400px;margin:0 auto}
-    .screen-title{font-size:20px;font-weight:700;color:var(--accent);text-align:center;margin-bottom:8px}
-    .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px;display:flex;flex-direction:column;gap:12px}
-    .card-label{font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.1em}
-    .divider{text-align:center;color:var(--muted);font-size:13px;padding:4px 0}
+    .group-screen{padding:24px 16px;display:flex;flex-direction:column;gap:14px;max-width:380px;margin:0 auto}
+    .screen-title{font-family:'Press Start 2P',monospace;font-size:9px;color:var(--accent);text-align:center;line-height:2;margin-bottom:4px}
+    .px-card{background:var(--surface);border:var(--px) solid var(--border);box-shadow:4px 4px 0 #00000055;padding:14px;display:flex;flex-direction:column;gap:10px}
+    .px-label{font-family:'Press Start 2P',monospace;font-size:7px;color:var(--muted);letter-spacing:.1em}
+    .divider{text-align:center;color:var(--muted);font-size:11px;display:flex;align-items:center;gap:8px}
+    .divider::before,.divider::after{content:'';flex:1;height:var(--px);background:var(--border)}
 
-    /* フォーム */
-    input{background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:15px;padding:10px 12px;outline:none;width:100%;-webkit-appearance:none}
+    /* インプット */
+    input{background:#080814;border:var(--px) solid var(--muted);color:var(--text);font-family:'DotGothic16',monospace;font-size:14px;padding:8px 10px;outline:none;width:100%;-webkit-appearance:none}
     input:focus{border-color:var(--accent)}
+    input::placeholder{color:var(--muted)}
 
-    /* 設定タブ */
-    .settings-section{padding:16px;display:flex;flex-direction:column;gap:16px}
+    /* 設定 */
+    .settings-section{padding:14px;display:flex;flex-direction:column;gap:14px}
     .section{display:flex;flex-direction:column;gap:8px}
-    .section-label{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.1em;text-transform:uppercase}
-    .group-info{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between}
-    .group-id-text{font-weight:700;color:var(--accent);letter-spacing:.12em;font-size:15px}
-    .member-list{display:flex;flex-direction:column;gap:8px}
-    .member-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;display:flex;align-items:center;gap:10px}
-    .member-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+    .section-label{font-family:'Press Start 2P',monospace;font-size:6px;color:var(--muted);letter-spacing:.12em}
+    .group-info{background:#080814;border:var(--px) solid var(--accent);padding:10px 12px;display:flex;align-items:center;justify-content:space-between;box-shadow:3px 3px 0 #2a4477}
+    .group-id-text{font-family:'Press Start 2P',monospace;font-size:8px;color:var(--accent);letter-spacing:.1em}
+    .member-list{display:flex;flex-direction:column;gap:6px}
+    .member-card{background:#080814;border:var(--px) solid var(--border);padding:10px 12px;display:flex;align-items:center;gap:10px}
+    .member-dot{width:8px;height:8px;border:var(--px) solid;flex-shrink:0}
     .member-info{flex:1;overflow:hidden}
-    .member-name{font-weight:700;font-size:14px}
+    .member-name{font-weight:bold;font-size:14px}
     .member-url{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px}
 
     /* シフト */
-    .loading{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 0;gap:14px;color:var(--muted);font-size:13px}
-    .spinner{width:28px;height:28px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
-    @keyframes spin{to{transform:rotate(360deg)}}
-    .empty-state{text-align:center;padding:60px 24px;color:var(--muted);font-size:14px;line-height:2}
-    .month-divider{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.1em;padding:16px 16px 6px}
-    .date-block{padding:0 16px}
-    .date-block--highlight{background:rgba(106,171,240,0.08);border-radius:8px;margin:2px 8px;padding:0 8px;}
-    .date-block--highlight .date-row{border-bottom-color:#6aabf033;}
-    .date-row{display:flex;align-items:center;padding:8px 0 4px;border-bottom:1px solid var(--border)}
-    .date-tag{font-size:14px;font-weight:700;min-width:96px;color:var(--text)}
-    .date-tag.sat{color:#6aabf0}.date-tag.sun{color:#f07070}
+    .loading{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 0;gap:16px}
+    .chars{display:flex;gap:6px;align-items:flex-end}
+    .char{width:14px;height:14px;border:var(--px) solid;animation:charjump .6s steps(1) infinite}
+    .char:nth-child(1){background:#5588cc;border-color:#7799cc;animation-delay:0s}
+    .char:nth-child(2){background:#bb7744;border-color:#cc8855;animation-delay:.15s}
+    .char:nth-child(3){background:#449966;border-color:#55aa77;animation-delay:.3s}
+    .char:nth-child(4){background:#885599;border-color:#9966bb;animation-delay:.45s}
+    @keyframes charjump{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+    .progress-wrap{width:160px;height:8px;background:#080814;border:var(--px) solid var(--muted);overflow:hidden}
+    .progress-bar{height:100%;background:repeating-linear-gradient(90deg,var(--accent) 0px,var(--accent) 5px,transparent 5px,transparent 8px);width:65%;animation:progress-scroll 1.2s steps(12) infinite}
+    @keyframes progress-scroll{from{background-position:0 0}to{background-position:64px 0}}
+    .loading-text{font-family:'Press Start 2P',monospace;font-size:7px;color:var(--accent);animation:blink 1s steps(1) infinite}
+    @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+    .loading-dots::after{content:'';animation:dotanim 1.5s steps(4) infinite}
+    @keyframes dotanim{0%{content:''}25%{content:'.'}50%{content:'..'}75%{content:'...'}}
+    .loading-sub{font-size:12px;color:var(--muted)}
+
+    .empty-state{text-align:center;padding:60px 24px;color:var(--muted);font-size:13px;line-height:2}
+    .month-divider{font-family:'Press Start 2P',monospace;font-size:6px;color:var(--muted);letter-spacing:.15em;padding:14px 14px 6px;display:flex;align-items:center;gap:8px}
+    .month-divider::after{content:'';flex:1;height:var(--px);background:var(--border)}
+    .date-block{padding:0 14px}
+    .date-block--highlight{border-left:calc(var(--px)*2) solid var(--accent);background:#5588cc0a;padding-left:10px;margin:2px 8px}
+    .date-row{display:flex;align-items:center;padding:7px 0 5px;border-bottom:var(--px) solid #ffffff08;gap:6px}
+    .date-tag{font-family:'DotGothic16',monospace;font-size:13px;font-weight:bold;min-width:88px;color:var(--text)}
+    .date-tag.sat{color:#5599bb}.date-tag.sun{color:#aa4455}
     .shift-pills{display:flex;flex-wrap:wrap;gap:4px;flex:1}
-    .shift-pill{display:flex;align-items:center;gap:5px;border-radius:6px;padding:3px 8px}
-    .pill-name{font-size:11px;font-weight:700}
-    .pill-time{font-size:12px;color:#999;font-variant-numeric:tabular-nums}
+    .shift-pill{display:flex;align-items:center;gap:4px;padding:2px 6px;border:var(--px) solid;font-size:11px}
 
-    .c0{color:#6aabf0}.c1{color:#f0a06a}.c2{color:#6af0a0}.c3{color:#c06af0}.c4{color:#f0e06a}.c5{color:#f06aa0}.c6{color:#6ae0f0}.c7{color:#a0f06a}
-    .bg0{background:#6aabf018}.bg1{background:#f0a06a18}.bg2{background:#6af0a018}.bg3{background:#c06af018}.bg4{background:#f0e06a18}.bg5{background:#f06aa018}.bg6{background:#6ae0f018}.bg7{background:#a0f06a18}
+    .c0{color:#7799cc}.c1{color:#cc8855}.c2{color:#55aa77}.c3{color:#9966bb}.c4{color:#aaa033}.c5{color:#cc5566}.c6{color:#5599aa}.c7{color:#99aa55}
+    .bg0{border-color:#5588cc55;background:#5588cc0e}
+    .bg1{border-color:#bb774455;background:#bb77440e}
+    .bg2{border-color:#44996655;background:#4499660e}
+    .bg3{border-color:#8855bb55;background:#8855bb0e}
+    .bg4{border-color:#99882255;background:#9988220e}
+    .bg5{border-color:#bb445566;background:#bb44550e}
+    .bg6{border-color:#33889955;background:#3388990e}
+    .bg7{border-color:#77885555;background:#7788550e}
 
-    .pill-pending{border:1px dashed #f0a06a;background:transparent!important;}
-    .pill-pending .pill-name{color:#f0a06a!important;}
-    .pill-pending .pill-time{color:#f0a06a88;}
-    .pill-pending .pill-label{font-size:9px;color:#f0a06a;border:1px solid #f0a06a;border-radius:3px;padding:0 3px;margin-right:2px;}
-    .status-bar{position:fixed;bottom:0;left:0;right:0;background:var(--bg);border-top:1px solid var(--border);padding:8px 16px;display:flex;justify-content:space-between;font-size:11px;color:var(--muted);z-index:98}
-    .toast{position:fixed;bottom:40px;left:50%;transform:translateX(-50%);background:#222233;color:var(--text);font-size:13px;padding:10px 20px;border-radius:20px;border:1px solid var(--border);z-index:999;pointer-events:none;opacity:0;transition:opacity .3s;white-space:nowrap}
+    .pill-name{font-size:11px;font-weight:bold}
+    .pill-time{font-size:11px;color:#556;font-variant-numeric:tabular-nums}
+
+    .pill-pending{border-style:dashed!important;background:transparent!important;border-color:#bb774488!important}
+    .pill-pending .pill-name{color:#cc8855!important}
+    .pill-pending .pill-time{color:#bb774466}
+    .pill-label{font-size:7px;border:var(--px) solid #cc8855;padding:0 2px;color:#cc8855;font-family:'Press Start 2P',monospace}
+
+    .status-bar{position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:var(--px) solid var(--border);padding:6px 14px;display:flex;justify-content:space-between;font-size:11px;color:var(--muted);z-index:98}
+    .toast{position:fixed;bottom:36px;left:50%;transform:translateX(-50%);background:var(--surface);color:var(--accent3);font-size:12px;padding:8px 16px;border:var(--px) solid var(--accent3);box-shadow:3px 3px 0 #224433;z-index:999;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .2s}
     .toast.show{opacity:1}
   </style>
 </head>
 <body>
 
 <div class="header">
-  <span class="header-title">📋 しふとまとめれ～る</span>
+  <span class="logo">SHIFT.EXE</span>
   <div class="header-actions">
-    <button class="btn-ghost btn-sm" id="fetchBtn" style="display:none" onclick="fetchAll(true)">更新</button>
-    <button class="btn-danger btn-sm" id="leaveBtn" style="display:none" onclick="leaveGroup()">ホームに戻る</button>
+    <button class="btn-px btn-ghost btn-sm" id="fetchBtn" style="display:none" onclick="fetchAll(true)">更新</button>
+    <button class="btn-px btn-red btn-sm" id="leaveBtn" style="display:none" onclick="leaveGroup()">HOME</button>
   </div>
 </div>
 
 <div class="tabs" id="tabs" style="display:none">
-  <div class="tab active" data-tab="shifts">シフト</div>
-  <div class="tab" data-tab="settings">メンバー設定</div>
+  <div class="tab active" data-tab="shifts">▶ シフト</div>
+  <div class="tab" data-tab="settings">⚙ メンバー設定</div>
 </div>
 
 <div class="main">
@@ -108,21 +140,21 @@
   <!-- グループ画面 -->
   <div id="groupScreen">
     <div class="group-screen">
-      <div class="screen-title">シフト一覧</div>
+      <div class="screen-title">SHIFT<br>MATOMEREL</div>
 
-      <div class="card">
-        <div class="card-label">新しいグループを作る</div>
+      <div class="px-card">
+        <div class="px-label">NEW GAME</div>
         <input type="text" id="newGroupId" placeholder="グループID（例: maverick2026）" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
-        <div style="font-size:11px;color:var(--muted);">英数字入力,任意のIDを入力してください</div>
-        <button class="btn" onclick="createGroup()">グループを作る</button>
+        <div style="font-size:11px;color:var(--muted);">英数字入力，任意のIDを入力してください</div>
+        <button class="btn-px btn-primary" onclick="createGroup()">START ▶</button>
       </div>
 
-      <div class="divider">— すでにグループIDがある場合 —</div>
+      <div class="divider">CONTINUE</div>
 
-      <div class="card">
-        <div class="card-label">グループに参加する</div>
+      <div class="px-card">
+        <div class="px-label">LOAD GAME</div>
         <input type="text" id="joinGroupId" placeholder="グループID" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
-        <button class="btn" onclick="joinGroup()">参加する</button>
+        <button class="btn-px btn-primary" onclick="joinGroup()">JOIN ▶</button>
       </div>
     </div>
   </div>
@@ -139,16 +171,16 @@
       <div class="settings-section">
 
         <div class="section">
-          <div class="section-label">グループID</div>
+          <div class="section-label">GROUP ID</div>
           <div class="group-info">
             <span class="group-id-text" id="groupIdDisplay"></span>
-            <button class="btn-ghost btn-sm" onclick="copyGroupId()">IDコピー</button>
+            <button class="btn-px btn-ghost btn-sm" onclick="copyGroupId()">COPY</button>
           </div>
         </div>
 
         <div class="section">
-          <div class="section-label">メンバー追加</div>
-          <div class="card">
+          <div class="section-label">ADD MEMBER</div>
+          <div class="px-card">
             <div>
               <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">あだ名</div>
               <input type="text" id="nameInput" placeholder="シフタ" maxlength="20" autocomplete="off">
@@ -157,12 +189,12 @@
               <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">シフトURL（ciftr.jp）</div>
               <input type="url" id="urlInput" placeholder="https://m-s1.ciftr.jp/staff/index?s=..." autocomplete="off" autocorrect="off" autocapitalize="off">
             </div>
-            <button class="btn" onclick="addMember()">追加する</button>
+            <button class="btn-px btn-primary" onclick="addMember()">ADD ＋</button>
           </div>
         </div>
 
         <div class="section">
-          <div class="section-label">登録済みメンバー</div>
+          <div class="section-label">MEMBERS</div>
           <div class="member-list" id="memberList">
             <div style="font-size:13px;color:var(--muted);">まだ登録されていません</div>
           </div>
@@ -175,7 +207,7 @@
 </div>
 
 <div class="status-bar">
-  <span id="statusText">準備完了</span>
+  <span id="statusText">▶ READY</span>
   <span id="lastUpdated"></span>
 </div>
 <div class="toast" id="toast"></div>
@@ -184,25 +216,26 @@
 const DAY=['日','月','火','水','木','金','土'];
 const C=['c0','c1','c2','c3','c4','c5','c6','c7'];
 const BG=['bg0','bg1','bg2','bg3','bg4','bg5','bg6','bg7'];
-let members=[], groupId=null;
+const LOADING_MSGS=['みんなのシフトを集めてるよ','もうちょっとだけ待ってね！','ciftrにアクセス中...','データを整理してるよ','あとちょっと！'];
+let members=[], groupId=null, loadingMsgTimer=null;
 
 // ===== グループ =====
 function createGroup(){
-  const id = document.getElementById('newGroupId').value.trim();
+  const id=document.getElementById('newGroupId').value.trim();
   if(!id){ showToast('グループIDを入力してください'); return; }
   if(!/^[a-zA-Z0-9_-]+$/.test(id)){ showToast('英数字・ハイフン・アンダーバーのみ使えます'); return; }
   enterGroup(id);
 }
 
 function joinGroup(){
-  const id = document.getElementById('joinGroupId').value.trim();
+  const id=document.getElementById('joinGroupId').value.trim();
   if(!id){ showToast('グループIDを入力してください'); return; }
   enterGroup(id);
 }
 
 async function enterGroup(id){
-  groupId = id;
-  localStorage.setItem('shiftGroupId', id);
+  groupId=id;
+  localStorage.setItem('shiftGroupId',id);
   document.getElementById('groupScreen').style.display='none';
   document.getElementById('appScreen').style.display='block';
   document.getElementById('tabs').style.display='flex';
@@ -224,7 +257,7 @@ function leaveGroup(){
   document.getElementById('fetchBtn').style.display='none';
   document.getElementById('leaveBtn').style.display='none';
   document.querySelectorAll('.tab')[0].click();
-  setStatus('準備完了');
+  setStatus('▶ READY');
   document.getElementById('lastUpdated').textContent='';
   document.getElementById('shiftContent').innerHTML='<div class="empty-state">「更新」を押してシフトを読み込む</div>';
 }
@@ -236,7 +269,7 @@ async function loadMembers(){
     const d=await r.json();
     members=d.members||[];
     renderMembers();
-    setStatus('準備完了');
+    setStatus('▶ READY');
   }catch(e){ showToast('読み込みに失敗しました'); }
 }
 
@@ -247,7 +280,7 @@ async function addMember(){
   if(!url.includes('ciftr.jp')){ showToast('ciftr.jpのURLを入力してください'); return; }
   try{
     const r=await fetch(`/api/groups?groupId=${encodeURIComponent(groupId)}&action=add`,{
-      method:'POST', headers:{'Content-Type':'application/json'},
+      method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({name,url})
     });
     const d=await r.json();
@@ -263,7 +296,7 @@ async function addMember(){
 async function removeMember(url,name){
   try{
     const r=await fetch(`/api/groups?groupId=${encodeURIComponent(groupId)}&action=remove`,{
-      method:'POST', headers:{'Content-Type':'application/json'},
+      method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({url})
     });
     const d=await r.json();
@@ -277,7 +310,24 @@ async function removeMember(url,name){
 async function fetchAll(force=false){
   if(!members.length){ showToast('先にメンバーを設定してください'); return; }
   document.getElementById('fetchBtn').disabled=true;
-  document.getElementById('shiftContent').innerHTML=`<div class="loading"><div class="spinner"></div><span>シフトを読み込み中...</span></div>`;
+
+  // ローディング表示（ドットキャラ＋メッセージ）
+  let msgIdx=0;
+  document.getElementById('shiftContent').innerHTML=`
+    <div class="loading">
+      <div class="chars">
+        <div class="char"></div><div class="char"></div>
+        <div class="char"></div><div class="char"></div>
+      </div>
+      <div class="progress-wrap"><div class="progress-bar"></div></div>
+      <div class="loading-text loading-dots">LOADING</div>
+      <div class="loading-sub" id="loadingMsg">${LOADING_MSGS[0]}</div>
+    </div>`;
+  loadingMsgTimer=setInterval(()=>{
+    msgIdx=(msgIdx+1)%LOADING_MSGS.length;
+    const el=document.getElementById('loadingMsg');
+    if(el) el.textContent=LOADING_MSGS[msgIdx];
+  },1500);
   document.querySelectorAll('.tab')[0].click();
 
   try{
@@ -287,6 +337,7 @@ async function fetchAll(force=false){
     const d=await r.json();
     if(d.error) throw new Error(d.error);
 
+    clearInterval(loadingMsgTimer);
     document.getElementById('fetchBtn').disabled=false;
     renderShifts(d.results||[]);
 
@@ -298,9 +349,10 @@ async function fetchAll(force=false){
     const t=d.cachedAt?new Date(d.cachedAt):new Date();
     document.getElementById('lastUpdated').textContent=`${t.getMonth()+1}/${t.getDate()} ${t.getHours()}:${String(t.getMinutes()).padStart(2,'0')} 更新`;
   }catch(e){
+    clearInterval(loadingMsgTimer);
     document.getElementById('fetchBtn').disabled=false;
     document.getElementById('shiftContent').innerHTML='<div class="empty-state">取得に失敗しました</div>';
-    setStatus('エラー');
+    setStatus('ERROR');
   }
 }
 
@@ -308,28 +360,27 @@ async function fetchAll(force=false){
 function renderMembers(){
   const list=document.getElementById('memberList');
   if(!members.length){ list.innerHTML='<div style="font-size:13px;color:var(--muted);">まだ登録されていません</div>'; return; }
+  const dotColors=['#7799cc','#cc8855','#55aa77','#9966bb','#aaa033','#cc5566','#5599aa','#99aa55'];
   list.innerHTML=members.map((m,i)=>`
     <div class="member-card">
-      <div class="member-dot" style="background:var(--accent)"></div>
+      <div class="member-dot" style="color:${dotColors[i%8]};border-color:${dotColors[i%8]}"></div>
       <div class="member-info">
         <div class="member-name ${C[i%8]}">${esc(m.name)}</div>
         <div class="member-url">${esc(m.url)}</div>
       </div>
-      <button class="btn-danger" onclick="removeMember('${esc(m.url)}','${esc(m.name)}')">削除</button>
+      <button class="btn-px btn-red" onclick="removeMember('${esc(m.url)}','${esc(m.name)}')">DEL</button>
     </div>`).join('');
 }
 
 function renderShifts(results){
   const byDate={};
   for(const m of results){
-    // 確定シフト
     if(m.shifts){
       for(const s of m.shifts){
         if(!byDate[s.date]) byDate[s.date]=[];
         byDate[s.date].push({...s,name:m.name,colorIdx:m.colorIdx,pending:false});
       }
     }
-    // 申請シフト
     if(m.pendingShifts){
       for(const s of m.pendingShifts){
         if(!byDate[s.date]) byDate[s.date]=[];
@@ -340,7 +391,6 @@ function renderShifts(results){
   const dates=Object.keys(byDate).sort();
   if(!dates.length){ document.getElementById('shiftContent').innerHTML='<div class="empty-state">シフトが見つかりませんでした</div>'; return; }
 
-  // 確定シフトの人数で上位3日を取得
   const sorted=[...dates].sort((a,b)=>{
     const ac=byDate[a].filter(s=>!s.pending).length;
     const bc=byDate[b].filter(s=>!s.pending).length;
@@ -384,7 +434,7 @@ document.querySelectorAll('.tab').forEach(tab=>{
   });
 });
 
-// 起動: 前回のグループIDが保存されていれば自動で入る
+// 起動
 const savedId=localStorage.getItem('shiftGroupId');
 if(savedId) enterGroup(savedId);
 </script>
