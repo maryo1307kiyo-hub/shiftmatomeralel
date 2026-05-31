@@ -420,10 +420,6 @@ function renderShifts(results){
   const dates=Object.keys(byDate).sort();
   if(!dates.length){ document.getElementById('shiftContent').innerHTML='<div class="empty-state">シフトが見つかりませんでした</div>'; return; }
 
-  const highlight=isToday?'date-block--today':'';
-
-  const top3=new Set(sorted.slice(0,3));
-
   let html='', cur=null;
   for(const date of dates){
     const d=new Date(date+'T00:00:00'), mo=d.getMonth()+1, dow=d.getDay();
@@ -431,7 +427,7 @@ function renderShifts(results){
     const dc=dow===0?'sun':dow===6?'sat':'';
     const todayStr=new Date().toLocaleDateString('sv-SE');
     const isToday=date===todayStr;
-    const highlight=isToday?'date-block--today':top3.has(date)&&byDate[date].some(s=>!s.pending)?'date-block--highlight':'';
+    const highlight=isToday?'date-block--today':'';
     const pills=byDate[date].sort((a,b)=>a.start.localeCompare(b.start)).map(s=>{
       const c=C[s.colorIdx%8], bg=BG[s.colorIdx%8];
       if(s.pending){
@@ -448,9 +444,12 @@ function renderShifts(results){
 function copyGroupId(){
   const url=`${location.origin}${location.pathname}?g=${groupId}`;
   const text=`しふとまとめれ～るに招待します！\nグループID: ${groupId}\n${url}`;
-  navigator.clipboard.writeText(text).then(()=>showToast('招待リンクをコピーしました！'));
+  if(navigator.share){
+    navigator.share({title:'しふとまとめれ～る',text});
+  }else{
+    navigator.clipboard.writeText(text).then(()=>showToast('招待リンクをコピーしました！'));
+  }
 }
-
 function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2500); }
 function setStatus(t){ document.getElementById('statusText').textContent=t; }
