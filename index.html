@@ -420,11 +420,8 @@ function renderShifts(results){
   const dates=Object.keys(byDate).sort();
   if(!dates.length){ document.getElementById('shiftContent').innerHTML='<div class="empty-state">シフトが見つかりませんでした</div>'; return; }
 
-  const sorted=[...dates].sort((a,b)=>{
-    const ac=byDate[a].filter(s=>!s.pending).length;
-    const bc=byDate[b].filter(s=>!s.pending).length;
-    return bc-ac;
-  });
+  const highlight=isToday?'date-block--today':'';
+
   const top3=new Set(sorted.slice(0,3));
 
   let html='', cur=null;
