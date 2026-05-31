@@ -445,8 +445,11 @@ function renderShifts(results){
 
 // ===== ユーティリティ =====
 function copyGroupId(){
-  navigator.clipboard.writeText(groupId).then(()=>showToast('グループIDをコピーしました！'));
+  const url=`${location.origin}${location.pathname}?g=${groupId}`;
+  const text=`しふとまとめれ～るに招待します！\nグループID: ${groupId}\n${url}`;
+  navigator.clipboard.writeText(text).then(()=>showToast('招待リンクをコピーしました！'));
 }
+
 function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2500); }
 function setStatus(t){ document.getElementById('statusText').textContent=t; }
