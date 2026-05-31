@@ -110,6 +110,8 @@
     .pill-name{font-size:11px;font-weight:bold}
     .pill-time{font-size:11px;color:#556;font-variant-numeric:tabular-nums}
 
+    .date-block--today{border-left:calc(var(--px)*2) solid #cc8833;background:#cc883308;padding-left:10px;margin:2px 8px;}
+    .date-block--today .date-tag{color:#cc9944;}
     .pill-pending{border-style:dashed!important;background:transparent!important;border-color:#bb774488!important}
     .pill-pending .pill-name{color:#cc8855!important}
     .pill-pending .pill-time{color:#bb774466}
@@ -348,7 +350,7 @@ async function fetchAll(force=false){
 
     const ok=(d.results||[]).filter(r=>!r.error).length;
     const total=(d.results||[]).length;
-    const cacheLabel=d.fromCache?'':'';
+    const cacheLabel=d.fromCache?' (キャッシュ)':'';
     setStatus(`${ok}/${total}人 取得完了${cacheLabel}`);
 
     const t=d.cachedAt?new Date(d.cachedAt):new Date();
@@ -430,7 +432,9 @@ function renderShifts(results){
     const d=new Date(date+'T00:00:00'), mo=d.getMonth()+1, dow=d.getDay();
     if(mo!==cur){ html+=`<div class="month-divider">${d.getFullYear()}年 ${mo}月</div>`; cur=mo; }
     const dc=dow===0?'sun':dow===6?'sat':'';
-    const highlight=top3.has(date)&&byDate[date].some(s=>!s.pending)?'date-block--highlight':'';
+    const todayStr=new Date().toLocaleDateString('sv-SE');
+    const isToday=date===todayStr;
+    const highlight=isToday?'date-block--today':top3.has(date)&&byDate[date].some(s=>!s.pending)?'date-block--highlight':'';
     const pills=byDate[date].sort((a,b)=>a.start.localeCompare(b.start)).map(s=>{
       const c=C[s.colorIdx%8], bg=BG[s.colorIdx%8];
       if(s.pending){
