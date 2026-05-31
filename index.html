@@ -174,7 +174,7 @@
           <div class="section-label">GROUP ID</div>
           <div class="group-info">
             <span class="group-id-text" id="groupIdDisplay"></span>
-            <button class="btn-px btn-ghost btn-sm" onclick="copyGroupId()">COPY</button>
+            <button class="btn-px btn-ghost btn-sm" onclick="copyGroupId()">招待する</button>
           </div>
         </div>
 
@@ -348,7 +348,7 @@ async function fetchAll(force=false){
 
     const ok=(d.results||[]).filter(r=>!r.error).length;
     const total=(d.results||[]).length;
-    const cacheLabel=d.fromCache?' (キャッシュ)':'';
+    const cacheLabel=d.fromCache?'':'';
     setStatus(`${ok}/${total}人 取得完了${cacheLabel}`);
 
     const t=d.cachedAt?new Date(d.cachedAt):new Date();
