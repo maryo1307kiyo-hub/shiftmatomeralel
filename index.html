@@ -242,7 +242,7 @@
       <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">マイIDでログインすると給料計算などができます</div>
       <div style="display:flex;flex-direction:column;gap:8px;">
         <div style="font-size:11px;color:var(--muted);">マイID（英数字6文字以上）</div>
-        <input type="text" id="myUserId" placeholder="例: shiftarou1234" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+        <input type="text" id="myUserId" placeholder="例: kiyoshift2026" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
         <button class="btn-px btn-primary" onclick="loginMypage()">ログイン / 新規登録</button>
       </div>
     </div>
@@ -254,9 +254,9 @@
         <div style="font-size:11px;color:var(--muted);">グループID</div>
         <input type="text" id="regGroupId" placeholder="グループID" autocomplete="off" autocorrect="off" autocapitalize="off">
         <div style="font-size:11px;color:var(--muted);">ニックネーム（グループに登録済みのもの）</div>
-        <input type="text" id="regNickname" placeholder="例: たろう" autocomplete="off">
+        <input type="text" id="regNickname" placeholder="例: みき" autocomplete="off">
         <div style="font-size:11px;color:var(--muted);">時給（円）</div>
-        <input type="number" id="regWage" placeholder="1250">
+        <input type="number" id="regWage" placeholder="1200">
         <div style="font-size:11px;color:var(--muted);">交通費（往復・円）</div>
         <input type="number" id="regCommute" placeholder="400">
         <div style="font-size:11px;color:var(--muted);">ニックネームカラー</div>
@@ -527,11 +527,7 @@ function renderShifts(results){
 // ===== iCalリンクコピー =====
 function exportMemberCal(memberName){
   const calUrl=`${location.origin}/api/cal?g=${encodeURIComponent(groupId)}&name=${encodeURIComponent(memberName)}`;
-  if(navigator.share){
-    navigator.share({title:memberName+' のシフト購読リンク',text:'カレンダーアプリでこのURLを登録すると自動更新されます\n'+calUrl});
-  }else{
-    navigator.clipboard.writeText(calUrl).then(()=>showToast('カレンダーリンクをコピーしました！'));
-  }
+  navigator.clipboard.writeText(calUrl).then(()=>showToast('カレンダーURLをコピーしました！'));
 }
 
 
