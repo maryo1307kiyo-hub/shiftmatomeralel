@@ -300,6 +300,8 @@ async function addMember(){
 }
 
 async function removeMember(url,name){
+  if(!confirm(`${name} を削除しますか？`)) return;
+
   try{
     const r=await fetch(`/api/groups?groupId=${encodeURIComponent(groupId)}&action=remove`,{
       method:'POST',headers:{'Content-Type':'application/json'},
