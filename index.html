@@ -17,668 +17,726 @@
     body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(circle,#ffffff06 1px,transparent 1px);background-size:16px 16px;pointer-events:none;z-index:0}
     *{position:relative;z-index:1}
 
-    /* 画面全体 */
-    .app-container { max-width:600px; margin:0 auto; padding:16px; min-height:100vh; display:flex; flex-direction:column; gap:16px }
-    
-    /* レトロカードスタイル */
-    .retro-card {
-      background: var(--surface);
-      border: var(--px) solid var(--border);
-      padding: 16px;
-      box-shadow: 4px 4px 0px #000;
-    }
-    .retro-title { font-family:'Press Start 2P', monospace; font-size:12px; color:var(--accent); margin-bottom:12px; display:flex; justify-content:between; align-items:center }
-    
-    /* 案内画面 */
-    #setup-view { display: flex; flex-direction: column; gap: 16px; text-align: center; padding: 40px 16px; }
-    .logo { font-size: 24px; font-weight: bold; color: var(--accent); margin-bottom: 8px; text-shadow: 2px 2px 0px #000; }
-    
-    /* 入力フォーム共通 */
-    .input-group { margin-bottom:12px; text-align:left; }
-    .input-label { font-size:12px; margin-bottom:4px; display:block; color:var(--text) }
-    .retro-input {
-      width:100%; background:#070715; border:var(--px) solid var(--border);
-      color:#fff; padding:10px; font-family:'DotGothic16',monospace; font-size:14px; outline:none;
-    }
-    .retro-input:focus { border-color:var(--accent) }
-    
-    /* ボタン共通 */
-    .retro-btn {
-      background: var(--accent); color: #000; border: var(--px) solid #fff;
-      padding: 10px 16px; font-family:'DotGothic16',monospace; font-size:14px; font-weight:bold;
-      cursor: pointer; box-shadow: 2px 2px 0px #000; display:inline-block; width:100%; text-align:center;
-    }
-    .retro-btn:active { transform: translate(2px, 2px); box-shadow: 0px 0px 0px #000; }
-    .retro-btn.secondary { background:var(--surface); color:var(--text); border-color:var(--border); }
-    .retro-btn.danger { background:var(--accent2); color:#fff; }
+    /* ヘッダー */
+    .header{background:var(--surface);border-bottom:var(--px) solid var(--accent);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+    .logo{font-family:'Press Start 2P',monospace;font-size:8px;color:var(--accent);letter-spacing:.05em}
+    .header-actions{display:flex;gap:8px}
 
-    /* メインコンテンツ（初期状態は非表示） */
-    #main-content { display:none; flex-direction:column; gap:16px; }
+    /* ボタン */
+    .btn-px{font-family:'DotGothic16',monospace;font-size:13px;padding:6px 12px;border:none;cursor:pointer;transition:transform .08s}
+    .btn-px:active{transform:translate(2px,2px)}
+    .btn-px:disabled{opacity:.35}
+    .btn-primary{background:var(--accent);color:#fff;box-shadow:3px 3px 0 #2a4477;width:100%;padding:10px}
+    .btn-primary:active{box-shadow:1px 1px 0 #2a4477}
+    .btn-ghost{background:transparent;color:var(--accent);border:var(--px) solid var(--accent);box-shadow:3px 3px 0 #2a4477}
+    .btn-ghost:active{box-shadow:1px 1px 0 #2a4477}
+    .btn-sm{width:auto;padding:5px 11px;font-size:12px}
+    .btn-red{background:transparent;color:var(--accent2);border:var(--px) solid var(--accent2);box-shadow:3px 3px 0 #661122;font-size:11px;padding:4px 10px}
+    .btn-red:active{box-shadow:1px 1px 0 #661122}
 
-    /* タブ切り替え */
-    .tabs { display:flex; gap:4px; margin-bottom:-2px; z-index:2 }
-    .tab {
-      flex:1; background:var(--bg); border:var(--px) solid var(--border); border-bottom:none;
-      padding:8px; text-align:center; cursor:pointer; font-size:12px; color:var(--muted);
-    }
-    .tab.active { background:var(--surface); color:var(--accent); font-weight:bold; border-color:var(--border); border-bottom:var(--px) solid var(--surface); }
-    
-    .view { display:none; }
-    .view.active { display:block; }
+    /* タブ */
+    .tabs{display:flex;background:var(--surface);border-bottom:var(--px) solid var(--border);position:sticky;top:45px;z-index:99}
+    .tab{flex:1;text-align:center;padding:10px;font-family:'DotGothic16',monospace;font-size:13px;color:var(--muted);cursor:pointer;border-bottom:calc(var(--px)*2) solid transparent}
+    .tab.active{color:var(--accent);border-bottom-color:var(--accent)}
 
-    /* カレンダー */
-    .cal-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px }
-    .cal-grid { display:grid; grid-template-columns:repeat(7, 1fr); gap:4px; text-align:center }
-    .day-name { font-size:11px; color:var(--muted); padding-bottom:4px }
-    .day-cell {
-      background:#070715; border:1px solid var(--border); min-height:55px; padding:2px;
-      display:flex; flex-direction:column; align-items:stretch; justify-content:flex-start; gap:2px;
-    }
-    .day-cell.today { border-color:var(--accent4); background:#1a1510; }
-    .day-cell.other-month { opacity: 0.2; }
-    .day-num { font-size:10px; text-align:left; color:var(--muted); }
-    .day-cell.today .day-num { color:var(--accent4); font-weight:bold }
-    
-    .shift-tag {
-      font-size:9px; padding:1px 2px; border-radius:2px; color:#000; text-align:center;
-      overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:bold;
-    }
-    .shift-tag.pending { background:none !important; border:1px dashed currentColor; color:inherit; }
+    .view{display:none}.view.active{display:block}
+    .main{padding-bottom:80px}
 
-    /* メンバーリスト */
-    .member-list { display:flex; flex-direction:column; gap:8px }
-    .member-item {
-      display:flex; justify-content:space-between; align-items:center;
-      background:#070715; padding:8px 12px; border:1px solid var(--border);
-    }
-    .member-info { display:flex; align-items:center; gap:8px }
-    .color-dot { width:10px; height:10px; border-radius:50%; }
-    
-    /* マイページ・モーダル */
-    .modal {
-      position:fixed; inset:0; background:#000000aa; display:none; justify-content:center;
-      align-items:center; z-index:100; padding:16px;
-    }
-    .modal-content { width:100%; max-width:400px; background:var(--surface); border:var(--px) solid var(--border); padding:16px; box-shadow:6px 6px 0px #000; }
+    /* グループ画面 */
+    .group-screen{padding:24px 16px;display:flex;flex-direction:column;gap:14px;max-width:380px;margin:0 auto}
+    .screen-title{font-family:'Press Start 2P',monospace;font-size:9px;color:var(--accent);text-align:center;line-height:2;margin-bottom:4px}
+    .px-card{background:var(--surface);border:var(--px) solid var(--border);box-shadow:4px 4px 0 #00000055;padding:14px;display:flex;flex-direction:column;gap:10px}
+    .px-label{font-family:'Press Start 2P',monospace;font-size:7px;color:var(--muted);letter-spacing:.1em}
+    .divider{text-align:center;color:var(--muted);font-size:11px;display:flex;align-items:center;gap:8px}
+    .divider::before,.divider::after{content:'';flex:1;height:var(--px);background:var(--border)}
 
-    /* 統計 */
-    .stats-grid { display:grid; grid-template-columns:1fr; gap:8px; margin-top:12px }
-    .stat-row { display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px dashed var(--border) }
-    .stat-label { color:var(--muted); font-size:12px }
-    .stat-value { font-weight:bold; }
+    /* インプット */
+    input{background:#080814;border:var(--px) solid var(--muted);color:var(--text);font-family:'DotGothic16',monospace;font-size:14px;padding:8px 10px;outline:none;width:100%;-webkit-appearance:none}
+    input:focus{border-color:var(--accent)}
+    input::placeholder{color:var(--muted)}
 
-    /* トースト通知 */
-    #toast {
-      position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
-      background:var(--accent3); color:#000; padding:8px 16px; font-weight:bold;
-      box-shadow:4px 4px 0px #000; border:var(--px) solid #fff; display:none; z-index:200;
-    }
+    /* 設定 */
+    .settings-section{padding:14px;display:flex;flex-direction:column;gap:14px}
+    .section{display:flex;flex-direction:column;gap:8px}
+    .section-label{font-family:'Press Start 2P',monospace;font-size:6px;color:var(--muted);letter-spacing:.12em}
+    .group-info{background:#080814;border:var(--px) solid var(--accent);padding:10px 12px;display:flex;align-items:center;justify-content:space-between;box-shadow:3px 3px 0 #2a4477}
+    .group-id-text{font-family:'Press Start 2P',monospace;font-size:8px;color:var(--accent);letter-spacing:.1em}
+    .member-list{display:flex;flex-direction:column;gap:6px}
+    .member-card{background:#080814;border:var(--px) solid var(--border);padding:10px 12px;display:flex;align-items:center;gap:10px}
+    .member-dot{width:8px;height:8px;border:var(--px) solid;flex-shrink:0}
+    .member-info{flex:1;overflow:hidden}
+    .member-name{font-weight:bold;font-size:14px}
+    .member-url{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px}
 
-    /* ローディングオーバーレイ */
-    #loading {
-      position:fixed; inset:0; background:#0f0f22cc; display:flex; flex-direction:column;
-      justify-content:center; align-items:center; z-index:150; display:none;
-    }
-    .spinner { font-family:'Press Start 2P', monospace; font-size:12px; color:var(--accent); animation: blink 1s infinite; }
-    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+    /* シフト */
+    .loading{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 0;gap:16px}
+    .chars{display:flex;gap:6px;align-items:flex-end}
+    .char{width:14px;height:14px;border:var(--px) solid;animation:charjump .6s steps(1) infinite}
+    .char:nth-child(1){background:#5588cc;border-color:#7799cc;animation-delay:0s}
+    .char:nth-child(2){background:#bb7744;border-color:#cc8855;animation-delay:.15s}
+    .char:nth-child(3){background:#449966;border-color:#55aa77;animation-delay:.3s}
+    .char:nth-child(4){background:#885599;border-color:#9966bb;animation-delay:.45s}
+    @keyframes charjump{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+    .progress-wrap{width:160px;height:8px;background:#080814;border:var(--px) solid var(--muted);overflow:hidden}
+    .progress-bar{height:100%;background:repeating-linear-gradient(90deg,var(--accent) 0px,var(--accent) 5px,transparent 5px,transparent 8px);width:65%;animation:progress-scroll 1.2s steps(12) infinite}
+    @keyframes progress-scroll{from{background-position:0 0}to{background-position:64px 0}}
+    .loading-text{font-family:'Press Start 2P',monospace;font-size:7px;color:var(--accent);animation:blink 1s steps(1) infinite}
+    @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+    .loading-dots::after{content:'';animation:dotanim 1.5s steps(4) infinite}
+    @keyframes dotanim{0%{content:''}25%{content:'.'}50%{content:'..'}75%{content:'...'}}
+    .loading-sub{font-size:12px;color:var(--muted)}
+
+    .empty-state{text-align:center;padding:60px 24px;color:var(--muted);font-size:13px;line-height:2}
+    .month-divider{font-family:'Press Start 2P',monospace;font-size:6px;color:var(--muted);letter-spacing:.15em;padding:14px 14px 6px;display:flex;align-items:center;gap:8px}
+    .month-divider::after{content:'';flex:1;height:var(--px);background:var(--border)}
+    .date-block{padding:0 14px}
+    .date-block--highlight{border-left:calc(var(--px)*2) solid var(--accent);background:#5588cc0a;padding-left:10px;margin:2px 8px}
+    .date-row{display:flex;align-items:center;padding:7px 0 5px;border-bottom:var(--px) solid #ffffff08;gap:6px}
+    .date-tag{font-family:'DotGothic16',monospace;font-size:13px;font-weight:bold;min-width:88px;color:var(--text)}
+    .date-tag.sat{color:#5599bb}.date-tag.sun{color:#aa4455}
+    .shift-pills{display:flex;flex-wrap:wrap;gap:4px;flex:1}
+    .shift-pill{display:flex;align-items:center;gap:4px;padding:2px 6px;border:var(--px) solid;font-size:11px}
+
+    .c0{color:#7799cc}.c1{color:#cc8855}.c2{color:#55aa77}.c3{color:#9966bb}.c4{color:#aaa033}.c5{color:#cc5566}.c6{color:#5599aa}.c7{color:#99aa55}
+    .bg0{border-color:#5588cc55;background:#5588cc0e}
+    .bg1{border-color:#bb774455;background:#bb77440e}
+    .bg2{border-color:#44996655;background:#4499660e}
+    .bg3{border-color:#8855bb55;background:#8855bb0e}
+    .bg4{border-color:#99882255;background:#9988220e}
+    .bg5{border-color:#bb445566;background:#bb44550e}
+    .bg6{border-color:#33889955;background:#3388990e}
+    .bg7{border-color:#77885555;background:#7788550e}
+
+    .pill-name{font-size:11px;font-weight:bold}
+    .pill-time{font-size:11px;color:#556;font-variant-numeric:tabular-nums}
+
+    .date-block--today{border-left:calc(var(--px)*2) solid #cc8833;background:#cc883308;padding-left:10px;margin:2px 8px;}
+    .date-block--today .date-tag{color:#cc9944;}
+    .pill-pending{border-style:dashed!important;background:transparent!important;border-color:#bb774488!important}
+    .pill-pending .pill-name{color:#cc8855!important}
+    .pill-pending .pill-time{color:#bb774466}
+    .pill-label{font-size:7px;border:var(--px) solid #cc8855;padding:0 2px;color:#cc8855;font-family:'Press Start 2P',monospace}
+
+    /* マイページ */
+    .mypage-btn{position:fixed;bottom:44px;right:14px;width:44px;height:44px;background:var(--surface);border:var(--px) solid var(--accent);box-shadow:3px 3px 0 #2a4477;display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;z-index:97;border-radius:0}
+    .mypage-btn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 #2a4477}
+    .modal-overlay{position:fixed;inset:0;background:#00000088;z-index:200;display:flex;align-items:flex-end}
+    .modal-overlay.hidden{display:none}
+    .modal-sheet{background:var(--bg);border-top:var(--px) solid var(--accent);width:100%;max-height:90vh;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px}
+    .modal-header{display:flex;align-items:center;justify-content:space-between}
+    .modal-title{font-family:'Press Start 2P',monospace;font-size:8px;color:var(--accent)}
+    .color-grid{display:flex;flex-wrap:wrap;gap:8px}
+    .color-dot{width:28px;height:28px;border:var(--px) solid #00000000;cursor:pointer}
+    .color-dot.selected{border-color:#fff;box-shadow:0 0 0 var(--px) var(--accent)}
+    .stat-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:var(--px) solid var(--border)}
+    .stat-label{font-size:12px;color:var(--muted)}
+    .stat-value{font-family:'Press Start 2P',monospace;font-size:9px;color:var(--accent3)}
+    .status-bar{position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:var(--px) solid var(--border);padding:6px 14px;display:flex;justify-content:space-between;font-size:11px;color:var(--muted);z-index:98}
+    .toast{position:fixed;bottom:36px;left:50%;transform:translateX(-50%);background:var(--surface);color:var(--accent3);font-size:12px;padding:8px 16px;border:var(--px) solid var(--accent3);box-shadow:3px 3px 0 #224433;z-index:999;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .2s}
+    .toast.show{opacity:1}
   </style>
 </head>
 <body>
 
-  <div class="app-container">
-    
-    <div id="setup-view" class="retro-card">
-      <div class="logo">しふとまとめれ～る</div>
-      <p style="font-size:12px; line-height:1.6; color:var(--muted); margin-bottom:16px;">
-        仲間内だけで共有できる安全なシフト管理アプリです。<br>
-        URLを知っている人のみアクセスできます。
-      </p>
-      
-      <div id="create-box" style="text-align:left; border-top:1px solid var(--border); padding-top:16px;">
-        <div class="retro-title">CREATE NEW GROUP</div>
-        <div class="input-group">
-          <label class="input-label">新しいグループ名（英数字）</label>
-          <input type="text" id="new-group-id" class="retro-input" placeholder="例: team-machida">
-        </div>
-        <button class="retro-btn" onclick="createNewGroup()">安全なグループ用URLを発行する</button>
-      </div>
-
-      <div id="url-result-box" style="display:none; text-align:left; margin-top:16px; border:1px dashed var(--accent3); padding:12px; background:#071a10;">
-        <div class="retro-title" style="color:var(--accent3)">URL GENERATED!</div>
-        <p style="font-size:12px; margin-bottom:8px;">以下のURLをコピーして、LINEなどで仲間内に共有してください。このURLを知っている人だけが入れます。</p>
-        <input type="text" id="generated-url" class="retro-input" readonly style="margin-bottom:8px; color:var(--accent3);">
-        <button class="retro-btn" onclick="copyGeneratedUrl()">URLをコピーする</button>
-      </div>
-    </div>
-
-    <div id="main-content">
-      
-      <div class="retro-card" style="padding:12px; display:flex; justify-content:space-between; align-items:center;">
-        <div>
-          <span style="font-size:10px; color:var(--muted); display:block;">GROUP ID</span>
-          <span id="display-group-id" style="font-weight:bold; color:var(--accent);">---</span>
-        </div>
-        <button class="retro-btn" style="width:auto; padding:4px 12px; font-size:12px;" onclick="openMypage()">マイページ</button>
-      </div>
-
-      <div>
-        <div class="tabs">
-          <div class="tab active" data-view="calendar">カレンダー</div>
-          <div class="tab" data-view="members">メンバー (<span id="member-count">0</span>)</div>
-        </div>
-        
-        <div id="view-calendar" class="view active retro-card" style="border-top:none;">
-          <div class="cal-header">
-            <button class="retro-btn" style="width:auto; padding:4px 12px;" onclick="prevMonth()">◀</button>
-            <span id="cal-month-title" style="font-weight:bold; font-size:16px;">2026年 6月</span>
-            <button class="retro-btn" style="width:auto; padding:4px 12px;" onclick="nextMonth()">▶</button>
-          </div>
-          <div class="cal-grid" id="calendar-grid">
-            </div>
-        </div>
-
-        <div id="view-members" class="view retro-card" style="border-top:none;">
-          <div class="retro-title">MEMBERS</div>
-          <div class="member-list" id="member-list-box" style="margin-bottom:16px;">
-            </div>
-          
-          <div style="border-top:1px solid var(--border); padding-top:12px;">
-            <div class="retro-title">ADD MEMBER</div>
-            <div class="input-group">
-              <label class="input-label">ニックネーム（本名がわかりやすいもの）</label>
-              <input type="text" id="add-name" class="retro-input" placeholder="例: たなか">
-            </div>
-            <div class="input-group">
-              <label class="input-label">ciftrの「自分のシフトURL」</label>
-              <input type="text" id="add-url" class="retro-input" placeholder="https://ciftr.jp/s=xxxxxx">
-            </div>
-            <button class="retro-btn" onclick="addMember()">このグループにメンバーを追加する</button>
-          </div>
-        </div>
-      </div>
-
-    </div>
+<div class="header">
+  <span class="logo">SHIFT.EXE</span>
+  <div class="header-actions">
+    <button class="btn-px btn-ghost btn-sm" id="fetchBtn" style="display:none" onclick="fetchAll(true)">更新</button>
+    <button class="btn-px btn-red btn-sm" id="leaveBtn" style="display:none" onclick="leaveGroup()">HOME</button>
   </div>
+</div>
 
-  <div class="modal" id="mypage-modal">
-    <div class="modal-content">
-      <div class="retro-title">MY PAGE <span style="cursor:pointer; float:right;" onclick="closeMypage()">[X]</span></div>
-      
-      <div id="mypageLogin">
-        <p style="font-size:12px; margin-bottom:12px; color:var(--muted);">給与計算やカレンダー連携（iCal）用の個人IDを入力、または新規登録してください。</p>
-        <div class="input-group">
-          <label class="input-label">マイページID（英数字6文字以上）</label>
-          <input type="text" id="myUserId" class="retro-input" placeholder="自分で決める秘密のID">
-        </div>
-        <div style="display:flex; gap:8px;">
-          <button class="retro-btn" onclick="loginMypage()">ログイン</button>
-          <button class="retro-btn secondary" onclick="registerMypage()">新規登録</button>
-        </div>
-        
-        <div id="register-fields" style="display:none; margin-top:12px; border-top:1px solid var(--border); padding-top:12px;">
-          <div class="input-group">
-            <label class="input-label">グループ内のどのニックネームと紐付ける？</label>
-            <select id="reg-nickname" class="retro-input"></select>
-          </div>
-          <button class="retro-btn" onclick="submitRegister()">登録を確定する</button>
-        </div>
+<div class="tabs" id="tabs" style="display:none">
+  <div class="tab active" data-tab="shifts">▶ シフト</div>
+  <div class="tab" data-tab="settings">⚙ メンバー設定</div>
+</div>
+
+<div class="main">
+
+  <!-- グループ画面 -->
+  <div id="groupScreen">
+    <div class="group-screen">
+      <div class="screen-title">SHIFT<br>MATOMEREL</div>
+
+      <div class="px-card">
+        <div class="px-label">NEW GAME</div>
+        <input type="text" id="newGroupId" placeholder="グループID（例: maverick2026）" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+        <div style="font-size:11px;color:var(--muted);">英数字入力，任意のIDを入力してください</div>
+        <button class="btn-px btn-primary" onclick="createGroup()">START ▶</button>
       </div>
 
-      <div id="mypageMain" style="display:none;">
-        <div style="margin-bottom:12px;">
-          <span style="font-size:11px; color:var(--muted);">紐付けメンバー:</span>
-          <span id="my-nickname-display" style="font-weight:bold; color:var(--accent);">---</span>
-        </div>
-        
-        <div class="input-group">
-          <label class="input-label">時給 (円)</label>
-          <input type="number" id="my-wage" class="retro-input" value="0">
-        </div>
-        <div class="input-group">
-          <label class="input-label">1回の交通費 (円)</label>
-          <input type="number" id="my-commute" class="retro-input" value="0">
-        </div>
-        <button class="retro-btn" onclick="updateMypageSettings()" style="margin-bottom:12px;">設定を保存する</button>
+      <div class="divider">CONTINUE</div>
 
-        <div style="border-top:1px solid var(--border); padding-top:12px;">
-          <div class="retro-title" style="color:var(--accent4);">iCal CALENDAR SYNC</div>
-          <p style="font-size:11px; color:var(--muted); margin-bottom:8px;">iPhoneやGoogleカレンダーに自分のシフトを自動同期するURLです。</p>
-          <input type="text" id="ical-url" class="retro-input" readonly style="font-size:11px; margin-bottom:8px; color:var(--accent4);">
-          <button class="retro-btn secondary" style="font-size:12px;" onclick="copyIcalUrl()">iCalのURLをコピー</button>
-        </div>
-
-        <button class="retro-btn danger" onclick="logoutMypage()" style="margin-top:16px; font-size:12px; padding:6px;">ログアウト</button>
+      <div class="px-card">
+        <div class="px-label">LOAD GAME</div>
+        <input type="text" id="joinGroupId" placeholder="グループID" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+        <button class="btn-px btn-primary" onclick="joinGroup()">JOIN ▶</button>
       </div>
     </div>
   </div>
 
-  <div id="toast">コピーしました！</div>
-  <div id="loading"><div class="spinner">LOADING...</div></div>
+  <!-- アプリ画面 -->
+  <div id="appScreen" style="display:none">
+    <div class="view active" id="view-shifts">
+      <div id="shiftContent">
+        <div class="empty-state">「更新」を押してシフトを読み込む<br><span style="font-size:12px">先にメンバー設定でURLを登録してね</span></div>
+      </div>
+    </div>
 
-  <script>
-    // グローバル状態
-    let currentGroupId = '';
-    let members = [];
-    let shiftData = [];
-    let myData = null;
-    
-    let currentDate = new Date();
-    const COLORS = ['#5588cc','#cc4455','#44aa66','#cc8833','#aa66cc','#eeaa33','#33aaaa'];
+    <div class="view" id="view-settings">
+      <div class="settings-section">
 
-    // 起動時処理
-    window.addEventListener('DOMContentLoaded', async () => {
-      const urlParams = new URLSearchParams(window.location.search);
-      const gParam = urlParams.get('g');
-
-      if (gParam) {
-        // URLに「?g=〇〇」がある場合のみ、メイン画面を起動
-        currentGroupId = gParam;
-        document.getElementById('setup-view').style.display = 'none';
-        document.getElementById('main-content').style.display = 'flex';
-        document.getElementById('display-group-id').innerText = currentGroupId.split('-')[0]; // 表示用は短く
-        
-        showLoading(true);
-        await initGroup();
-        showLoading(false);
-      } else {
-        // URLに何もついていなければ案内画面を表示
-        document.getElementById('setup-view').style.display = 'block';
-        document.getElementById('main-content').style.display = 'none';
-      }
-    });
-
-    // 安全なグループURLの発行（グループ名に推測不可能なランダム文字列を合体させる）
-    function createNewGroup() {
-      const inputId = document.getElementById('new-group-id').value.trim();
-      if (!inputId) return alert('グループ名を入力してください');
-      if (!/^[a-zA-Z0-9_-]+$/.test(inputId)) return alert('グループ名は英数字・ハイフン・アンダーバーのみ使えます');
-
-      // 誰も推測できない16文字のランダム文字列を生成して合体させる（カギの役割）
-      const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-      let randomStr = '';
-      for(let i=0; i<16; i++) {
-        randomStr += chars[Math.floor(Math.random() * chars.length)];
-      }
-
-      // 例: "tanaka-xyz789abc1234567"
-      const secureGroupId = `${inputId}-${randomStr}`;
-      const secureUrl = `${window.location.origin}${window.location.pathname}?g=${secureGroupId}`;
-
-      document.getElementById('generated-url').value = secureUrl;
-      document.getElementById('create-box').style.display = 'none';
-      document.getElementById('url-result-box').style.display = 'block';
-    }
-
-    function copyGeneratedUrl() {
-      const copyText = document.getElementById('generated-url');
-      copyText.select();
-      document.execCommand('copy');
-      showToast('共有用URLをコピーしました！');
-    }
-
-    // グループ情報の初期読み込み
-    async function initGroup() {
-      try {
-        const res = await fetch(`/api/groups?groupId=${currentGroupId}`);
-        const data = await res.json();
-        members = data.members || [];
-        document.getElementById('member-count').innerText = members.length;
-        
-        renderMembers();
-
-        // 全員のシフト一括取得
-        const sRes = await fetch(`/api/get-shifts?groupId=${currentGroupId}`);
-        const sData = await sRes.json();
-        shiftData = sData.results || [];
-        
-        renderCalendar();
-        
-        // ローカルストレージにマイページログインがあれば自動ログイン
-        const savedUid = localStorage.getItem('myUserId');
-        if (savedUid) {
-          await checkAutoLogin(savedUid);
-        }
-      } catch(e) {
-        console.error(e);
-        alert('データの読み込みに失敗しました');
-      }
-    }
-
-    // メンバー追加
-    async function addMember() {
-      const name = document.getElementById('add-name').value.trim();
-      const url = document.getElementById('add-url').value.trim();
-      
-      if(!name || !url) return alert('名前とURLを入力してください');
-      if(!url.includes('ciftr.jp')) return alert('ciftr.jpのURLのみ対応しています');
-
-      showLoading(true);
-      try {
-        const res = await fetch(`/api/groups?groupId=${currentGroupId}&action=add`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, url })
-        });
-        
-        if(!res.ok) {
-          const err = await res.json();
-          throw new Error(err.error || '追加失敗');
-        }
-
-        document.getElementById('add-name').value = '';
-        document.getElementById('add-url').value = '';
-        showToast('メンバーを追加しました！');
-        await initGroup();
-      } catch(e) {
-        alert(e.message);
-      } finally {
-        showLoading(false);
-      }
-    }
-
-    // メンバー一覧表示
-    function renderMembers() {
-      const box = document.getElementById('member-list-box');
-      box.innerHTML = '';
-      if(members.length === 0) {
-        box.innerHTML = '<p style="font-size:12px; color:var(--muted); text-align:center;">メンバーがまだいません</p>';
-        return;
-      }
-      members.forEach((m, idx) => {
-        const dotColor = COLORS[idx % COLORS.length];
-        const item = document.createElement('div');
-        item.className = 'member-item';
-        item.innerHTML = `
-          <div class="member-info">
-            <div class="color-dot" style="background:${dotColor}"></div>
-            <span style="font-weight:bold;">${m.name}</span>
+        <div class="section">
+          <div class="section-label">GROUP ID</div>
+          <div class="group-info">
+            <span class="group-id-text" id="groupIdDisplay"></span>
+            <button class="btn-px btn-ghost btn-sm" onclick="copyGroupId()">招待する</button>
           </div>
-          <a href="${m.url}" target="_blank" style="font-size:11px; color:var(--accent); text-decoration:none;">ciftr元ページ ↗</a>
-        `;
-        box.appendChild(item);
-      });
-    }
+        </div>
 
-    // カレンダー描画
-    function renderCalendar() {
-      const grid = document.getElementById('calendar-grid');
-      grid.innerHTML = '';
+        <div class="section">
+          <div class="section-label">ADD MEMBER</div>
+          <div class="px-card">
+            <div>
+              <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">あだ名</div>
+              <input type="text" id="nameInput" placeholder="シフタ" maxlength="20" autocomplete="off">
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">シフトURL（ciftr.jp）</div>
+              <input type="url" id="urlInput" placeholder="https://m-s1.ciftr.jp/staff/index?s=..." autocomplete="off" autocorrect="off" autocapitalize="off">
+            </div>
+            <button class="btn-px btn-primary" onclick="addMember()">ADD ＋</button>
+          </div>
+        </div>
 
-      const year = currentDate.getFullYear();
-      const month = currentDate.getMonth();
-      
-      document.getElementById('cal-month-title').innerText = `${year}年 ${month + 1}月`;
+        <div class="section">
+          <div class="section-label">MEMBERS</div>
+          <div class="member-list" id="memberList">
+            <div style="font-size:13px;color:var(--muted);">まだ登録されていません</div>
+          </div>
+        </div>
 
-      // 曜日ヘッダー
-      const dNames = ['日','月','火','水','木','金','土'];
-      dNames.forEach(n => {
-        const h = document.createElement('div');
-        h.className = 'day-name';
-        if(n==='日') h.style.color = 'var(--accent2)';
-        if(n==='土') h.style.color = 'var(--accent)';
-        h.innerText = n;
-        grid.appendChild(h);
-      });
+      </div>
+    </div>
+  </div>
 
-      const firstDay = new Date(year, month, 1).getDay();
-      const lastDate = new Date(year, month + 1, 0).getDate();
-      const prevLastDate = new Date(year, month, 0).getDate();
+</div>
 
-      // 前月のハミ出し分
-      for (let i = firstDay - 1; i >= 0; i--) {
-        createCell(grid, prevLastDate - i, true);
-      }
+<div class="status-bar">
+  <span id="statusText">▶ READY</span>
+  <span id="lastUpdated"></span>
+</div>
+<div class="toast" id="toast"></div>
+<button class="mypage-btn" onclick="openMypage()" title="マイページ">👤</button>
 
-      // 今月の数字
-      const today = new Date();
-      for (let d = 1; d <= lastDate; d++) {
-        const isToday = (today.getFullYear()===year && today.getMonth()===month && today.getDate()===d);
-        const cell = createCell(grid, d, false, isToday);
+<!-- マイページモーダル -->
+<div class="modal-overlay hidden" id="mypageModal" onclick="closeMypageModal(event)">
+  <div class="modal-sheet" id="mypageSheet">
+    <div class="modal-header">
+      <span class="modal-title" id="mypageTitle">MY PAGE</span>
+      <button class="btn-px btn-ghost btn-sm" onclick="closeMypage()">✕</button>
+    </div>
 
-        // シフトデータの埋め込み
-        const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-        
-        shiftData.forEach(mResult => {
-          if(mResult.error) return;
-          const color = COLORS[mResult.colorIdx % COLORS.length];
-          
-          // 確定シフト
-          const confirmed = (mResult.shifts || []).filter(s => s.date === dateStr);
-          confirmed.forEach(s => {
-            const tag = document.createElement('div');
-            tag.className = 'shift-tag';
-            tag.style.backgroundColor = color;
-            tag.innerText = `${mResult.name}:${s.start}`;
-            cell.appendChild(tag);
-          });
+    <!-- 未ログイン画面 -->
+    <div id="mypageLogin">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">マイIDでログインすると給料計算などができます</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <div style="font-size:11px;color:var(--muted);">マイID（英数字6文字以上）</div>
+        <input type="text" id="myUserId" placeholder="例: shift1234" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+        <button class="btn-px btn-primary" onclick="loginMypage()">ログイン / 新規登録</button>
+      </div>
+    </div>
 
-          // 申請中シフト
-          const pending = (mResult.pendingShifts || []).filter(s => s.date === dateStr);
-          pending.forEach(s => {
-            const tag = document.createElement('div');
-            tag.className = 'shift-tag pending';
-            tag.style.color = color;
-            tag.innerText = `[申]${s.start}`;
-            cell.appendChild(tag);
-          });
-        });
-      }
+    <!-- 新規登録画面 -->
+    <div id="mypageRegister" style="display:none">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">初回登録：グループIDとニックネームを紐づけます</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <div style="font-size:11px;color:var(--muted);">グループID</div>
+        <input type="text" id="regGroupId" placeholder="グループID" autocomplete="off" autocorrect="off" autocapitalize="off">
+        <div style="font-size:11px;color:var(--muted);">ニックネーム（グループに登録済みのもの）</div>
+        <input type="text" id="regNickname" placeholder="例: みき" autocomplete="off">
+        <div style="font-size:11px;color:var(--muted);">時給（円）</div>
+        <input type="number" id="regWage" placeholder="1200">
+        <div style="font-size:11px;color:var(--muted);">交通費（往復・円）</div>
+        <input type="number" id="regCommute" placeholder="400">
+        <div style="font-size:11px;color:var(--muted);">ニックネームカラー</div>
+        <div class="color-grid" id="regColorGrid"></div>
+        <button class="btn-px btn-primary" onclick="registerMypage()">登録する</button>
+      </div>
+    </div>
 
-      // 次月のハミ出し分（7の倍数になるように調整）
-      const totalCells = grid.children.length - 7; // ヘッダー分を引く
-      const nextCells = 42 - totalCells;
-      for (let i = 1; i <= nextCells; i++) {
-        createCell(grid, i, true);
-      }
+    <!-- マイページ本体 -->
+    <div id="mypageMain" style="display:none">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+        <span id="myNicknameDisplay" style="font-size:16px;font-weight:bold;"></span>
+        <span style="font-size:11px;color:var(--muted);" id="myGroupDisplay"></span>
+      </div>
 
-      // もしマイページログイン中なら給与計算ロジックも走らせる
-      if(myData) {
-        calculateSalary();
-      }
-    }
+      <!-- 今月の給料 -->
+      <div class="px-card" style="margin-bottom:10px;">
+        <div class="px-label">今月の給料（予定）</div>
+        <div id="salaryBreakdown" style="display:flex;flex-direction:column;gap:4px;"></div>
+      </div>
 
-    function createCell(grid, num, isOther, isToday=false) {
-      const cell = document.createElement('div');
-      cell.className = 'day-cell';
-      if(isOther) cell.classList.add('other-month');
-      if(isToday) cell.classList.add('today');
-      
-      cell.innerHTML = `<div class="day-num">${num}</div>`;
-      grid.appendChild(cell);
-      return cell;
-    }
+      <!-- 設定 -->
+      <div class="px-card">
+        <div class="px-label">設定</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">時給（円）</div>
+        <input type="number" id="myWage" placeholder="1200">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px;margin-top:8px;">交通費（往復・円）</div>
+        <input type="number" id="myCommute" placeholder="400">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:6px;margin-top:8px;">ニックネームカラー</div>
+        <div class="color-grid" id="myColorGrid"></div>
+        <button class="btn-px btn-primary" onclick="saveMySettings()" style="margin-top:8px;">保存</button>
+      </div>
 
-    function prevMonth() { currentDate.setMonth(currentDate.getMonth() - 1); renderCalendar(); }
-    function nextMonth() { currentDate.setMonth(currentDate.getMonth() + 1); renderCalendar(); }
+      <button class="btn-px btn-red" onclick="logoutMypage()" style="width:100%;margin-top:8px;">ログアウト</button>
+    </div>
+  </div>
+</div>
 
-    // ===== マイページ・給与・カレンダー連携関連のロジック =====
-    function openMypage() {
-      document.getElementById('mypage-modal').style.display = 'flex';
-    }
-    function closeMypage() {
-      document.getElementById('mypage-modal').style.display = 'none';
-    }
+<script>
+const DAY=['日','月','火','水','木','金','土'];
+const C=['c0','c1','c2','c3','c4','c5','c6','c7'];
+const BG=['bg0','bg1','bg2','bg3','bg4','bg5','bg6','bg7'];
+const LOADING_MSGS=['みんなのシフトを集めてるよ','もうちょっとだけ待ってね！','ciftrにアクセス中...','データを整理してるよ','あとちょっと！'];
+let members=[], groupId=null, loadingMsgTimer=null, lastShiftData=null, lastResults=null;
 
-    async function checkAutoLogin(uid) {
-      try {
-        const res = await fetch(`/api/mypage?userId=${uid}`);
-        if(res.ok) {
-          myData = await res.json();
-          showLoggedInMypage();
-        }
-      } catch(e){}
-    }
+// ===== グループ =====
+function createGroup(){
+  const id=document.getElementById('newGroupId').value.trim();
+  if(!id){ showToast('グループIDを入力してください'); return; }
+  if(!/^[a-zA-Z0-9_-]+$/.test(id)){ showToast('英数字・ハイフン・アンダーバーのみ使えます'); return; }
+  enterGroup(id);
+}
 
-    function loginMypage() {
-      const uid = document.getElementById('myUserId').value.trim();
-      if(!uid) return alert('IDを入力してください');
-      showLoading(true);
-      fetch(`/api/mypage?userId=${uid}`)
-        .then(res => {
-          if(!res.ok) throw new Error('ユーザーが見つからないか、IDが違います');
-          return res.json();
-        })
-        .then(data => {
-          myData = data;
-          localStorage.setItem('myUserId', uid);
-          showLoggedInMypage();
-          renderCalendar();
-        })
-        .catch(e => alert(e.message))
-        .finally(() => showLoading(false));
-    }
+function joinGroup(){
+  const id=document.getElementById('joinGroupId').value.trim();
+  if(!id){ showToast('グループIDを入力してください'); return; }
+  enterGroup(id);
+}
 
-    function registerMypage() {
-      const select = document.getElementById('reg-nickname');
-      select.innerHTML = '';
-      members.forEach(m => {
-        const op = document.createElement('option');
-        op.value = m.name;
-        op.innerText = m.name;
-        select.appendChild(op);
-      });
-      document.getElementById('register-fields').style.display = 'block';
-    }
+async function enterGroup(id){
+  groupId=id;
+  localStorage.setItem('shiftGroupId',id);
+  document.getElementById('groupScreen').style.display='none';
+  document.getElementById('appScreen').style.display='block';
+  document.getElementById('tabs').style.display='flex';
+  document.getElementById('fetchBtn').style.display='inline-block';
+  document.getElementById('leaveBtn').style.display='inline-block';
+  document.getElementById('groupIdDisplay').textContent=id;
+  setStatus('メンバーを読み込み中...');
+  await loadMembers();
+  if(members.length>0){
+    fetchAll();
+    // 初回表示後にバックグラウンドで差分チェック
+    setTimeout(bgRefresh, 3000);
+  }
+  else setStatus('メンバーを登録してください');
+}
 
-    function submitRegister() {
-      const uid = document.getElementById('myUserId').value.trim();
-      const nickname = document.getElementById('reg-nickname').value;
-      if(!uid || uid.length < 6) return alert('IDは英数字6文字以上で入力してください');
+function leaveGroup(){
+  localStorage.removeItem('shiftGroupId');
+  groupId=null; members=[];
+  document.getElementById('groupScreen').style.display='block';
+  document.getElementById('appScreen').style.display='none';
+  document.getElementById('tabs').style.display='none';
+  document.getElementById('fetchBtn').style.display='none';
+  document.getElementById('leaveBtn').style.display='none';
+  document.querySelectorAll('.tab')[0].click();
+  setStatus('▶ READY');
+  document.getElementById('lastUpdated').textContent='';
+  document.getElementById('shiftContent').innerHTML='<div class="empty-state">「更新」を押してシフトを読み込む</div>';
+}
 
-      showLoading(true);
-      fetch(`/api/mypage?action=register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: uid, nickname, groupId: currentGroupId })
-      })
-      .then(res => {
-        if(!res.ok) return res.json().then(e => { throw new Error(e.error) });
-        return res.json();
-      })
-      .then(data => {
-        myData = data;
-        localStorage.setItem('myUserId', uid);
-        showLoggedInMypage();
-        renderCalendar();
-        showToast('マイページを作成しました！');
-      })
-      .catch(e => alert(e.message))
-      .finally(() => showLoading(false));
-    }
+// ===== API =====
+async function loadMembers(){
+  try{
+    const r=await fetch(`/api/groups?groupId=${encodeURIComponent(groupId)}`);
+    const d=await r.json();
+    members=d.members||[];
+    renderMembers();
+    setStatus('▶ READY');
+  }catch(e){ showToast('読み込みに失敗しました'); }
+}
 
-    function showLoggedInMypage() {
-      document.getElementById('mypageLogin').style.display = 'none';
-      document.getElementById('mypageMain').style.display = 'block';
-      document.getElementById('my-nickname-display').innerText = myData.nickname;
-      document.getElementById('my-wage').value = myData.hourlyWage || 0;
-      document.getElementById('my-commute').value = myData.commute || 0;
-      
-      const protocol = window.location.protocol;
-      const host = window.location.host;
-      document.getElementById('ical-url').value = `${protocol}//${host}/api/cal?g=${currentGroupId}&name=${encodeURIComponent(myData.nickname)}`;
-    }
-
-    function updateMypageSettings() {
-      const wage = document.getElementById('my-wage').value;
-      const commute = document.getElementById('my-commute').value;
-      
-      showLoading(true);
-      fetch(`/api/mypage?action=update`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: myData.userId, hourlyWage: wage, commute: commute })
-      })
-      .then(res => res.json())
-      .then(data => {
-        myData = data;
-        renderCalendar();
-        showToast('設定を保存しました');
-      })
-      .catch(() => alert('保存失敗'))
-      .finally(() => showLoading(false));
-    }
-
-    function calculateSalary() {
-      if (!myData) return;
-      const mData = shiftData.find(r => r.name === myData.nickname);
-      if (!mData || !mData.shifts) return;
-
-      const year = currentDate.getFullYear();
-      const month = currentDate.getMonth() + 1;
-      const prefix = `${year}-${String(month).padStart(2,'0')}`;
-
-      // 今月の確定シフトを抽出
-      const currentMonthShifts = mData.shifts.filter(s => s.date.startsWith(prefix));
-      
-      let totalHours = 0;
-      let workDays = currentMonthShifts.length;
-
-      currentMonthShifts.forEach(s => {
-        const [sh, sm] = s.start.split(':').map(Number);
-        const [eh, em] = s.end.split(':').map(Number);
-        let diffMs = new Date(2000,0,1,eh,em) - new Date(2000,0,1,sh,sm);
-        if (diffMs < 0) diffMs += 24 * 60 * 60 * 1000; // 日跨ぎ対応
-        totalHours += diffMs / (1000 * 60 * 60);
-      });
-
-      const basePay = Math.round(totalHours * (myData.hourlyWage || 0));
-      const commutePay = workDays * (myData.commute || 0);
-      const total = basePay + commutePay;
-
-      // ビュー下部に統計として表示する箱を差し込む
-      let statsBox = document.getElementById('salary-stats-box');
-      if(!statsBox) {
-        statsBox = document.createElement('div');
-        statsBox.id = 'salary-stats-box';
-        statsBox.className = 'stats-grid';
-        document.getElementById('view-calendar').appendChild(statsBox);
-      }
-
-      statsBox.innerHTML = `
-        <div class="retro-title" style="margin-top:12px; color:var(--accent3);">給与シミュレーション (${month}月分)</div>
-        <div class="stat-row"><span class="stat-label">総労働時間</span><span class="stat-value">${totalHours.toFixed(1)} 時間</span></div>
-        <div class="stat-row"><span class="stat-label">勤務日数</span><span class="stat-value">${workDays} 日</span></div>
-        <div class="stat-row"><span class="stat-label">基本給合計</span><span class="stat-value">¥${basePay.toLocaleString()}</span></div>
-        <div class="stat-row"><span class="stat-label">交通費合計</span><span class="stat-value">¥${commutePay.toLocaleString()}</span></div>
-        <div class="stat-row" style="border:none;"><span class="stat-label" style="color:#fff;">見込み合計額</span><span class="stat-value" style="color:var(--accent3); font-size:16px;">¥${total.toLocaleString()}</span></div>
-      `;
-    }
-
-    function copyIcalUrl() {
-      const copyText = document.getElementById('ical-url');
-      copyText.select();
-      document.execCommand('copy');
-      showToast('iCal購読URLをコピーしました！');
-    }
-
-    function logoutMypage() {
-      localStorage.removeItem('myUserId');
-      myData = null;
-      document.getElementById('mypageLogin').style.display = 'block';
-      document.getElementById('mypageMain').style.display = 'none';
-      document.getElementById('myUserId').value = '';
-      const sBox = document.getElementById('salary-stats-box');
-      if(sBox) sBox.remove();
-      closeMypage();
-    }
-
-    // ===== 共通UIパーツ =====
-    function showLoading(show) { document.getElementById('loading').style.display = show ? 'flex' : 'none'; }
-    function showToast(msg) {
-      const t = document.getElementById('toast');
-      t.innerText = msg; t.style.display = 'block';
-      setTimeout(() => { t.style.display = 'none'; }, 2000);
-    }
-
-    // タブ切り替えロジック
-    document.querySelectorAll('.tab').forEach(tab => {
-      tab.addEventListener('click', () => {
-        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-        tab.classList.add('active');
-        document.getElementById('view-' + tab.dataset.view).classList.add('active');
-      });
+async function addMember(){
+  const name=document.getElementById('nameInput').value.trim();
+  const url=document.getElementById('urlInput').value.trim();
+  if(!name||!url){ showToast('名前とURLを入力してください'); return; }
+  if(!url.includes('ciftr.jp')){ showToast('ciftr.jpのURLを入力してください'); return; }
+  try{
+    const r=await fetch(`/api/groups?groupId=${encodeURIComponent(groupId)}&action=add`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({name,url})
     });
-  </script>
+    const d=await r.json();
+    if(d.error){ showToast(d.error==='already exists'?'このURLは登録済みです':d.error); return; }
+    members=d.members;
+    document.getElementById('nameInput').value='';
+    document.getElementById('urlInput').value='';
+    renderMembers();
+    showToast(`${name} を追加しました ✓`);
+  }catch(e){ showToast('追加に失敗しました'); }
+}
+
+async function removeMember(url,name){
+  if(!confirm(`${name} を削除しますか？`)) return;
+
+  try{
+    const r=await fetch(`/api/groups?groupId=${encodeURIComponent(groupId)}&action=remove`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({url})
+    });
+    const d=await r.json();
+    members=d.members;
+    renderMembers();
+    showToast(`${name} を削除しました`);
+  }catch(e){ showToast('削除に失敗しました'); }
+}
+
+// ===== シフト取得 =====
+async function fetchAll(force=false){
+  if(!members.length){ showToast('先にメンバーを設定してください'); return; }
+  document.getElementById('fetchBtn').disabled=true;
+
+  // ローディング表示（ドットキャラ＋メッセージ）
+  let msgIdx=0;
+  document.getElementById('shiftContent').innerHTML=`
+    <div class="loading">
+      <div class="chars">
+        <div class="char"></div><div class="char"></div>
+        <div class="char"></div><div class="char"></div>
+      </div>
+      <div class="progress-wrap"><div class="progress-bar"></div></div>
+      <div class="loading-text loading-dots">LOADING</div>
+      <div class="loading-sub" id="loadingMsg">${LOADING_MSGS[0]}</div>
+    </div>`;
+  loadingMsgTimer=setInterval(()=>{
+    msgIdx=(msgIdx+1)%LOADING_MSGS.length;
+    const el=document.getElementById('loadingMsg');
+    if(el) el.textContent=LOADING_MSGS[msgIdx];
+  },1500);
+  document.querySelectorAll('.tab')[0].click();
+
+  try{
+    const url=`/api/get-shifts?groupId=${encodeURIComponent(groupId)}${force?'&force=1':''}`;
+    const r=await fetch(url);
+    if(!r.ok) throw new Error(`HTTP ${r.status}`);
+    const d=await r.json();
+    if(d.error) throw new Error(d.error);
+
+    clearInterval(loadingMsgTimer);
+    document.getElementById('fetchBtn').disabled=false;
+    lastResults=d.results||[];
+    renderShifts(d.results||[]);
+    lastShiftData=JSON.stringify((d.results||[]).map(r=>({name:r.name,shifts:r.shifts,pendingShifts:r.pendingShifts})));
+
+    const ok=(d.results||[]).filter(r=>!r.error).length;
+    const total=(d.results||[]).length;
+    const cacheLabel=d.fromCache?' (キャッシュ)':'';
+    setStatus(`${ok}/${total}人 取得完了${cacheLabel}`);
+
+    const t=d.cachedAt?new Date(d.cachedAt):new Date();
+    document.getElementById('lastUpdated').textContent=`${t.getMonth()+1}/${t.getDate()} ${t.getHours()}:${String(t.getMinutes()).padStart(2,'0')} 更新`;
+  }catch(e){
+    clearInterval(loadingMsgTimer);
+    document.getElementById('fetchBtn').disabled=false;
+    document.getElementById('shiftContent').innerHTML='<div class="empty-state">取得に失敗しました</div>';
+    setStatus('ERROR');
+  }
+}
+
+// ===== バックグラウンド更新 =====
+async function bgRefresh(){
+  if(!groupId||!members.length) return;
+  try{
+    const r=await fetch(`/api/get-shifts?groupId=${encodeURIComponent(groupId)}&force=1`);
+    if(!r.ok) return;
+    const d=await r.json();
+    if(!d.results||d.fromCache) return;
+
+    // 差分チェック
+    const newData=JSON.stringify(d.results.map(r=>({name:r.name,shifts:r.shifts,pendingShifts:r.pendingShifts})));
+    if(newData===lastShiftData) return;
+
+    // 差分あり→更新
+    lastShiftData=newData;
+    renderShifts(d.results);
+    const t=new Date(d.cachedAt);
+    document.getElementById('lastUpdated').textContent=`${t.getMonth()+1}/${t.getDate()} ${t.getHours()}:${String(t.getMinutes()).padStart(2,'0')} 更新`;
+    showToast('シフトが更新されました！');
+  }catch(e){}
+}
+
+// ===== 描画 =====
+function renderMembers(){
+  const list=document.getElementById('memberList');
+  if(!members.length){ list.innerHTML='<div style="font-size:13px;color:var(--muted);">まだ登録されていません</div>'; return; }
+  const dotColors=['#7799cc','#cc8855','#55aa77','#9966bb','#aaa033','#cc5566','#5599aa','#99aa55'];
+  // マイページの色設定を反映
+  list.innerHTML=members.map((m,i)=>`
+    <div class="member-card">
+      <div class="member-dot" style="color:${myData&&myData.nickname===m.name?myData.color:dotColors[i%8]};border-color:${myData&&myData.nickname===m.name?myData.color:dotColors[i%8]}"></div>
+      <div class="member-info">
+        <div class="member-name ${C[i%8]}" style="${myData&&myData.nickname===m.name?'color:'+myData.color:''}">  ${esc(m.name)}</div>
+        <div class="member-url">${esc(m.url.replace(/([?&]s=)[^&]+/, '$1****'))}</div>
+      </div>
+      <button class="btn-px btn-ghost btn-sm" onclick="exportMemberCal('${esc(m.name)}')" style="font-size:10px;padding:3px 8px;">📅</button>
+      <button class="btn-px btn-red" onclick="removeMember('${esc(m.url)}','${esc(m.name)}')">DEL</button>
+    </div>`).join('');
+}
+
+function renderShifts(results){
+  const byDate={};
+  for(const m of results){
+    if(m.shifts){
+      for(const s of m.shifts){
+        if(!byDate[s.date]) byDate[s.date]=[];
+        byDate[s.date].push({...s,name:m.name,colorIdx:m.colorIdx,pending:false});
+      }
+    }
+    if(m.pendingShifts){
+      for(const s of m.pendingShifts){
+        if(!byDate[s.date]) byDate[s.date]=[];
+        byDate[s.date].push({...s,name:m.name,colorIdx:m.colorIdx,pending:true});
+      }
+    }
+  }
+  const dates=Object.keys(byDate).sort();
+  if(!dates.length){ document.getElementById('shiftContent').innerHTML='<div class="empty-state">シフトが見つかりませんでした</div>'; return; }
+
+  let html='', cur=null;
+  for(const date of dates){
+    const d=new Date(date+'T00:00:00'), mo=d.getMonth()+1, dow=d.getDay();
+    if(mo!==cur){ html+=`<div class="month-divider">${d.getFullYear()}年 ${mo}月</div>`; cur=mo; }
+    const dc=dow===0?'sun':dow===6?'sat':'';
+    const todayStr=new Date().toLocaleDateString('sv-SE');
+    const isToday=date===todayStr;
+    const highlight=isToday?'date-block--today':'';
+    const pills=byDate[date].sort((a,b)=>a.start.localeCompare(b.start)).map(s=>{
+      const c=C[s.colorIdx%8], bg=BG[s.colorIdx%8];
+      if(s.pending){
+        return `<div class="shift-pill pill-pending"><span class="pill-label">申</span><span class="pill-name">${esc(s.name)}</span><span class="pill-time">${esc(s.start)}–${esc(s.end)}</span></div>`;
+      }
+      return `<div class="shift-pill ${bg}"><span class="pill-name ${c}">${esc(s.name)}</span><span class="pill-time">${esc(s.start)}–${esc(s.end)}</span></div>`;
+    }).join('');
+    html+=`<div class="date-block ${highlight}"><div class="date-row"><span class="date-tag ${dc}">${mo}/${d.getDate()}（${DAY[dow]}）</span><div class="shift-pills">${pills}</div></div></div>`;
+  }
+  document.getElementById('shiftContent').innerHTML=html;
+}
+
+// ===== iCalリンクコピー =====
+function exportMemberCal(memberName){
+  const calUrl=`${location.origin}/api/cal?g=${encodeURIComponent(groupId)}&name=${encodeURIComponent(memberName)}`;
+  navigator.clipboard.writeText(calUrl).then(()=>showToast('カレンダーURLをコピーしました！'));
+}
+
+
+// ===== ユーティリティ =====
+function copyGroupId(){
+  const url=`${location.origin}${location.pathname}?g=${groupId}`;
+  const text=`しふとまとめれ～るに招待します！\nグループID: ${groupId}\n${url}`;
+  if(navigator.share){
+    navigator.share({title:'しふとまとめれ～る',text});
+  }else{
+    navigator.clipboard.writeText(text).then(()=>showToast('招待リンクをコピーしました！'));
+  }
+}
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2500); }
+function setStatus(t){ document.getElementById('statusText').textContent=t; }
+
+// ===== マイページ =====
+const MY_COLORS = [
+  '#7799cc','#cc8855','#55aa77','#9966bb',
+  '#aaa033','#cc5566','#5599aa','#99aa55',
+  '#cc9966','#6699bb'
+];
+let myData = null;
+let mySelectedColor = MY_COLORS[0];
+
+function buildColorGrid(containerId, selectedColor, onSelect){
+  const grid = document.getElementById(containerId);
+  grid.innerHTML = MY_COLORS.map(c =>
+    `<div class="color-dot${c===selectedColor?' selected':''}" style="background:${c}" onclick="(${onSelect.toString()})('${c}','${containerId}')"></div>`
+  ).join('');
+}
+
+function selectColor(color, gridId){
+  mySelectedColor = color;
+  document.querySelectorAll(`#${gridId} .color-dot`).forEach(d => d.classList.remove('selected'));
+  event.target.classList.add('selected');
+}
+
+function openMypage(){
+  document.getElementById('mypageModal').classList.remove('hidden');
+  const savedId = localStorage.getItem('myUserId');
+  if(savedId && myData){
+    showMypageMain();
+  } else if(savedId){
+    document.getElementById('myUserId').value = savedId;
+    loginMypage();
+  }
+  buildColorGrid('regColorGrid', MY_COLORS[0], selectColor);
+}
+
+function closeMypage(){
+  document.getElementById('mypageModal').classList.add('hidden');
+}
+
+function closeMypageModal(e){
+  if(e.target.id==='mypageModal') closeMypage();
+}
+
+async function loginMypage(){
+  const userId = document.getElementById('myUserId').value.trim();
+  if(!userId){ showToast('IDを入力してください'); return; }
+  if(!/^[a-zA-Z0-9_-]{6,}$/.test(userId)){
+    showToast('英数字6文字以上で入力してください'); return;
+  }
+  try{
+    const r = await fetch(`/api/mypage?userId=${encodeURIComponent(userId)}`);
+    if(r.status===404){
+      // 新規登録へ
+      localStorage.setItem('myUserId', userId);
+      document.getElementById('mypageLogin').style.display='none';
+      document.getElementById('mypageRegister').style.display='block';
+      if(groupId) document.getElementById('regGroupId').value = groupId;
+      buildColorGrid('regColorGrid', MY_COLORS[0], selectColor);
+      return;
+    }
+    const d = await r.json();
+    myData = d;
+    localStorage.setItem('myUserId', userId);
+    showMypageMain();
+  }catch(e){ showToast('エラーが発生しました'); }
+}
+
+async function registerMypage(){
+  const userId = localStorage.getItem('myUserId');
+  const groupId2 = document.getElementById('regGroupId').value.trim();
+  const nickname = document.getElementById('regNickname').value.trim();
+  const hourlyWage = document.getElementById('regWage').value;
+  const commute = document.getElementById('regCommute').value;
+  if(!groupId2||!nickname){ showToast('グループIDとニックネームは必須です'); return; }
+  try{
+    const r = await fetch('/api/mypage?action=register',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({userId,nickname,groupId:groupId2,hourlyWage,commute,color:mySelectedColor})
+    });
+    const d = await r.json();
+    if(d.error){ showToast(d.error); return; }
+    myData = d;
+    showMypageMain();
+    applyMemberColor();
+  }catch(e){ showToast('登録に失敗しました'); }
+}
+
+async function saveMySettings(){
+  const userId = localStorage.getItem('myUserId');
+  const hourlyWage = document.getElementById('myWage').value;
+  const commute = document.getElementById('myCommute').value;
+  try{
+    const r = await fetch('/api/mypage?action=update',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({userId,hourlyWage,commute,color:mySelectedColor})
+    });
+    const d = await r.json();
+    if(d.error){ showToast(d.error); return; }
+    myData = d;
+    showMypageMain();
+    applyMemberColor();
+    showToast('保存しました ✓');
+  }catch(e){ showToast('保存に失敗しました'); }
+}
+
+function showMypageMain(){
+  document.getElementById('mypageLogin').style.display='none';
+  document.getElementById('mypageRegister').style.display='none';
+  document.getElementById('mypageMain').style.display='block';
+  document.getElementById('mypageTitle').textContent='MY PAGE';
+
+  const nameEl = document.getElementById('myNicknameDisplay');
+  nameEl.textContent = myData.nickname;
+  nameEl.style.color = myData.color;
+  document.getElementById('myGroupDisplay').textContent = 'グループ: '+myData.groupId;
+  document.getElementById('myWage').value = myData.hourlyWage||'';
+  document.getElementById('myCommute').value = myData.commute||'';
+  mySelectedColor = myData.color;
+  buildColorGrid('myColorGrid', myData.color, selectColor);
+
+  // 給料計算
+  calcSalary();
+  applyMemberColor();
+}
+
+function calcSalary(){
+  if(!lastResults||!myData) return;
+  const memberData = lastResults.find(r=>r.name===myData.nickname&&r.colorIdx!==undefined);
+  if(!memberData) return;
+
+  const now = new Date();
+  const thisMonth = now.getMonth();
+  const thisYear = now.getFullYear();
+
+  let totalMinutes = 0;
+  let workDays = 0;
+  const shifts = [...(memberData.shifts||[]), ...(memberData.pendingShifts||[])];
+
+  for(const s of shifts){
+    const d = new Date(s.date+'T00:00:00');
+    if(d.getMonth()!==thisMonth||d.getFullYear()!==thisYear) continue;
+    const [sh,sm] = s.start.split(':').map(Number);
+    const [eh,em] = s.end.split(':').map(Number);
+    totalMinutes += (eh*60+em)-(sh*60+sm);
+    workDays++;
+  }
+
+  const hours = totalMinutes/60;
+  const wage = myData.hourlyWage||0;
+  const commute = myData.commute||0;
+  const basePay = Math.floor(hours*wage);
+  const commutePay = commute*workDays;
+  const total = basePay+commutePay;
+
+  document.getElementById('salaryBreakdown').innerHTML = `
+    <div class="stat-row"><span class="stat-label">勤務時間</span><span class="stat-value">${hours.toFixed(1)}h</span></div>
+    <div class="stat-row"><span class="stat-label">勤務日数</span><span class="stat-value">${workDays}日</span></div>
+    <div class="stat-row"><span class="stat-label">基本給</span><span class="stat-value">¥${basePay.toLocaleString()}</span></div>
+    <div class="stat-row"><span class="stat-label">交通費</span><span class="stat-value">¥${commutePay.toLocaleString()}</span></div>
+    <div class="stat-row" style="border-bottom:none"><span class="stat-label" style="font-weight:bold;color:var(--text);">合計</span><span class="stat-value" style="color:var(--accent3);font-size:11px;">¥${total.toLocaleString()}</span></div>
+  `;
+}
+
+function applyMemberColor(){
+  if(!myData) return;
+  // メンバーリストの色を更新
+  renderMembers();
+}
+
+function logoutMypage(){
+  localStorage.removeItem('myUserId');
+  myData = null;
+  document.getElementById('mypageMain').style.display='none';
+  document.getElementById('mypageLogin').style.display='block';
+  document.getElementById('myUserId').value='';
+  closeMypage();
+}
+
+// ===== タブ =====
+document.querySelectorAll('.tab').forEach(tab=>{
+  tab.addEventListener('click',()=>{
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('view-'+tab.dataset.tab).classList.add('active');
+  });
+});
+
+// 起動
+const savedId=localStorage.getItem('shiftGroupId');
+if(savedId) enterGroup(savedId);
+</script>
 </body>
 </html>
