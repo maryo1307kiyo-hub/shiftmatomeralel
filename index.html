@@ -900,6 +900,133 @@ async function refreshRanking() {
     });
   } catch(e) { console.error(e); }
 }
+  // ==========================================
+// 【完全修正版】ミニゲーム用ロジック（グループID=1専用）
+// ==========================================
+let gameScore = 0, gameTimer = null, gameTimeLeft = 10.0, isGaming = false;
+let gamePlayerName = ""; 
+
+// 1. グループID判定（どんな型でも、タイミングがズレても絶対に捕まえる仕様）
+async function checkGameDisplay() {
+  // 画面の切り替えなどが完全に終わるまで、ほんの少しだけ（0.1秒）待ってから処理を開始する
+  setTimeout(async () => {
+    // 元コードで使われている可能性のあるすべてのグループID変数（id, groupId, currentGroupId）を網羅
+    const currentId = typeof id !== 'undefined' ? id : 
+                      (typeof groupId !== 'undefined' ? groupId : 
+                      (typeof currentGroupId !== 'undefined' ? currentGroupId : null));
+    
+    // デバッグ用：もし動かない場合はブラウザのF12開発者ツールの「コンソール」にIDが表示されます
+    console.log("現在のグループID判定対象:", currentId);
+
+    // 判定の強化：中身が数字の 1、文字列の "1"、または "group1" や "1 " のように1が含まれていればOKにする
+    if (currentId !== null && String(currentId).includes("1")) {
+      document.getElementById('gameZone').style.display = 'block';
+      
+      // ローカルストレージに名前が残っていれば自動セット
+      const savedName = localStorage.getItem('game_player_name');
+      if (savedName) {
+        gamePlayerName = savedName;
+        document.getElementById('gamePlayerName').innerText = savedName;
+        document.getElementById('gamePreAuth').style.display = 'none';
+        document.getElementById('gamePlayArea').style.display = 'block';
+      } else {
+        document.getElementById('gamePreAuth').style.display = 'block';
+        document.getElementById('gamePlayArea').style.display = 'none';
+      }
+      await refreshRanking();
+    } else {
+      // 1以外のグループでは絶対に非表示にする
+      document.getElementById('gameZone').style.display = 'none';
+    }
+  }, 100); // 100ミリ秒の安全バッファ
+}
+
+// 2. プレイヤー名を決定する処理
+function submitGamePlayer() {
+  const nameInput = document.getElementById('gameNicknameInput').value.trim();
+  if (!nameInput) {
+    if (typeof showToast === 'function') showToast('ニックネームを入力してください');
+    else alert('ニックネームを入力してください');
+    return;
+  }
+  gamePlayerName = nameInput;
+  localStorage.setItem('game_player_name', nameInput); 
+  document.getElementById('gamePlayerName').innerText = nameInput;
+  document.getElementById('gamePreAuth').style.display = 'none';
+  document.getElementById('gamePlayArea').style.display = 'block';
+}
+
+// 3. 連打カウント処理
+function countClick() {
+  if (!gamePlayerName) return;
+  if (!isGaming) {
+    isGaming = true;
+    gameScore = 1;
+    gameTimeLeft = 10.0;
+    document.getElementById('gameScore').innerText = gameScore;
+    document.getElementById('gameHitBtn').innerText = 'PUSH!';
+    gameTimer = setInterval(() => {
+      gameTimeLeft -= 0.1;
+      if (gameTimeLeft <= 0) {
+        gameTimeLeft = 0;
+        clearInterval(gameTimer);
+        endGame();
+      }
+      document.getElementById('gameTimer').innerText = gameTimeLeft.toFixed(1);
+    }, 100);
+  } else {
+    gameScore++;
+    document.getElementById('gameScore').innerText = gameScore;
+  }
+}
+
+// 4. ゲーム終了・スコア保存
+async function endGame() {
+  isGaming = false;
+  document.getElementById('gameHitBtn').innerText = 'FINISH!';
+  const finalScore = gameScore;
+  
+  if (typeof showToast === 'function') showToast(`記録: ${finalScore}連打！`);
+  else if (typeof toast === 'function') toast(`記録: ${finalScore}連打！`);
+  
+  try {
+    await fetch(`/api/game?groupId=1&action=submit`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ 
+        userId: "group1_user_" + gamePlayerName, 
+        nickname: gamePlayerName, 
+        score: finalScore 
+      })
+    });
+    await refreshRanking();
+  } catch(e) { console.error(e); }
+  
+  setTimeout(() => {
+    document.getElementById('gameHitBtn').innerText = 'RETRY';
+    document.getElementById('gameTimer').innerText = '10.0';
+  }, 1500);
+}
+
+// 5. ランキング取得
+async function refreshRanking() {
+  try {
+    const res = await fetch(`/api/game?groupId=1`);
+    const data = await res.json();
+    const tbody = document.getElementById('rankTbody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    const list = data.ranking || [];
+    if (list.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--muted);font-size:11px;">まだ記録がありません</td></tr>';
+      return;
+    }
+    const localEsc = (s) => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    list.slice(0, 5).forEach((item, idx) => {
+      tbody.innerHTML += `<tr><td style="font-family:'Press Start 2P'; font-size:7px; color:var(--accent4); padding:4px 0;">#${idx+1}</td><td style="font-weight:bold; padding:4px 0;">${localEsc(item.nickname)}</td><td style="font-family:'Press Start 2P'; font-size:7px; padding:4px 0;">${item.score}</td></tr>`;
+    });
+  } catch(e) { console.error(e); }
+}
 </script>
 </body>
 </html>
