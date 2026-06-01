@@ -185,7 +185,7 @@
       <div class="screen-title">SHIFT<br>MATOMEREL</div>
 
       <div class="px-card">
-        <div class="px-label">NEW GAME</div>
+        <div class="px-label">NEW GROUP</div>
         <input type="text" id="newGroupId" placeholder="グループID（例: maverick2026）" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
         <div style="font-size:11px;color:var(--muted);">英数字入力，任意のIDを入力してください</div>
         <button class="btn-px btn-primary" onclick="createGroup()">START ▶</button>
@@ -194,7 +194,7 @@
       <div class="divider">CONTINUE</div>
 
       <div class="px-card">
-        <div class="px-label">LOAD GAME</div>
+        <div class="px-label">LOAD GROUP</div>
         <input type="text" id="joinGroupId" placeholder="グループID" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
         <button class="btn-px btn-primary" onclick="joinGroup()">JOIN ▶</button>
       </div>
@@ -340,7 +340,7 @@
         <div style="font-size:11px;color:var(--muted);">ニックネーム（グループに登録済みのもの）</div>
         <input type="text" id="regNickname" placeholder="例: しふた" autocomplete="off">
         <div style="font-size:11px;color:var(--muted);">時給（円）</div>
-        <input type="number" id="regWage" placeholder="1200">
+        <input type="number" id="regWage" placeholder="1250">
         <div style="font-size:11px;color:var(--muted);">交通費（往復・円）</div>
         <input type="number" id="regCommute" placeholder="400">
         <div style="font-size:11px;color:var(--muted);">ニックネームカラー</div>
@@ -367,7 +367,7 @@
       <div class="px-card">
         <div class="px-label">設定</div>
         <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">時給（円）</div>
-        <input type="number" id="myWage" placeholder="1200">
+        <input type="number" id="myWage" placeholder="1250">
         <div style="font-size:11px;color:var(--muted);margin-bottom:4px;margin-top:8px;">交通費（往復・円）</div>
         <input type="number" id="myCommute" placeholder="400">
         <div style="font-size:11px;color:var(--muted);margin-bottom:6px;margin-top:8px;">ニックネームカラー</div>
@@ -766,8 +766,8 @@ function initGame(){
     nextObstacle--;
     if(nextObstacle <= 0){
       spawnObstacle();
-      nextObstacle = Math.floor(80 + Math.random()*60 - score/50);
-      nextObstacle = Math.max(nextObstacle, 40);
+      nextObstacle = Math.floor(60 + Math.random()*60 - score/20);
+      nextObstacle = Math.max(nextObstacle, 30);
     }
     for(const obs of obstacles) obs.x -= speed;
     obstacles = obstacles.filter(o => o.x > -30);
