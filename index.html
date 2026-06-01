@@ -185,7 +185,7 @@
       <div class="screen-title">SHIFT<br>MATOMEREL</div>
 
       <div class="px-card">
-        <div class="px-label">NEW GAME</div>
+        <div class="px-label">グループを作る</div>
         <input type="text" id="newGroupId" placeholder="グループID（例: maverick2026）" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
         <div style="font-size:11px;color:var(--muted);">英数字入力，任意のIDを入力してください</div>
         <button class="btn-px btn-primary" onclick="createGroup()">START ▶</button>
@@ -194,7 +194,7 @@
       <div class="divider">CONTINUE</div>
 
       <div class="px-card">
-        <div class="px-label">LOAD GAME</div>
+        <div class="px-label">グループに参加する</div>
         <input type="text" id="joinGroupId" placeholder="グループID" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
         <button class="btn-px btn-primary" onclick="joinGroup()">JOIN ▶</button>
       </div>
@@ -286,7 +286,7 @@
 <!-- ゲームオーバーレイ -->
 <div class="game-overlay hidden" id="gameOverlay">
   <div class="game-header">
-    <span class="game-title">LION RUN</span>
+    <span class="game-title" id="gameTitle">LION RUN</span>
     <button class="btn-px btn-red btn-sm" onclick="exitGame()">EXIT</button>
   </div>
   
@@ -297,8 +297,8 @@
     <input type="text" id="gameNickname" placeholder="例: しふた" autocomplete="off">
     <div style="font-size:11px;color:var(--muted);">マイID（スコア保存用・任意）</div>
     <input type="text" id="gameUserId" placeholder="例: matomereltarou1234" autocomplete="off" autocorrect="off" autocapitalize="off">
-    <div style="font-size:11px;color:var(--muted);">ランキンググループID</div>
-    <input type="text" id="gameGroupIdInput" placeholder="0〜9" autocomplete="off">
+    <div style="font-size:11px;color:var(--muted);">ランキングに表示するグループID（1〜9）</div>
+    <input type="text" id="gameGroupIdInput" placeholder="例: 3" autocomplete="off">
     <button class="game-btn" onclick="startGame()">GAME START ▶</button>
   </div>
 
@@ -414,7 +414,8 @@ let members=[], groupId=null, loadingMsgTimer=null, lastShiftData=null, lastResu
 function createGroup(){
   const id=document.getElementById('newGroupId').value.trim();
   if(!id){ showToast('グループIDを入力してください'); return; }
-  if(/^\d$/.test(id)){ openGameSetup(id); return; }
+  if(/^[0-5]$/.test(id)){ openGameSetup(id, 'lion'); return; }
+  if(/^[6-9]$/.test(id)){ openGameSetup(id, 'tap'); return; }
   if(!/^[a-zA-Z0-9_-]+$/.test(id)){ showToast('英数字・ハイフン・アンダーバーのみ使えます'); return; }
   enterGroup(id);
 }
@@ -422,7 +423,8 @@ function createGroup(){
 function joinGroup(){
   const id=document.getElementById('joinGroupId').value.trim();
   if(!id){ showToast('グループIDを入力してください'); return; }
-  if(/^\d$/.test(id)){ openGameSetup(id); return; }
+  if(/^[0-5]$/.test(id)){ openGameSetup(id, 'lion'); return; }
+  if(/^[6-9]$/.test(id)){ openGameSetup(id, 'tap'); return; }
   enterGroup(id);
 }
 
@@ -648,11 +650,14 @@ let gameGroupId = null;
 let gameNickname = null;
 let gameUserId = null;
 
-function openGameSetup(id){
+function openGameSetup(id, gameType='lion'){
   gameGroupId = id;
+  window._startGameType = gameType;
   document.getElementById('gameOverlay').classList.remove('hidden');
+  document.getElementById('gameTitle').textContent = gameType==='tap' ? 'TAP ATTACK' : 'LION RUN';
   document.getElementById('gameSetup').style.display='flex';
   document.getElementById('gameScreen').style.display='none';
+  document.getElementById('tapScreen').style.display='none';
   // 保存済みの情報を復元
   const saved = localStorage.getItem('gameProfile');
   if(saved){
@@ -679,10 +684,15 @@ function startGame(){
   gameGroupId = gid || gameGroupId;
   localStorage.setItem('gameProfile', JSON.stringify({nickname:nick, userId:uid}));
   document.getElementById('gameSetup').style.display='none';
-  document.getElementById('gameScreen').style.display='flex';
-  document.getElementById('gameOverMsg').style.display='none';
-  document.getElementById('jumpBtn').style.display='block';
-  initGame();
+  if(window._startGameType === 'tap'){
+    document.getElementById('gameScreen').style.display='none';
+    switchToTapGame();
+  } else {
+    document.getElementById('gameScreen').style.display='flex';
+    document.getElementById('gameOverMsg').style.display='none';
+    document.getElementById('jumpBtn').style.display='block';
+    initGame();
+  }
 }
 
 function restartGame(){
