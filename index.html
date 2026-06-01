@@ -185,7 +185,7 @@
       <div class="screen-title">SHIFT<br>MATOMEREL</div>
 
       <div class="px-card">
-        <div class="px-label">NEW GROUP</div>
+        <div class="px-label">NEW GAME</div>
         <input type="text" id="newGroupId" placeholder="グループID（例: maverick2026）" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
         <div style="font-size:11px;color:var(--muted);">英数字入力，任意のIDを入力してください</div>
         <button class="btn-px btn-primary" onclick="createGroup()">START ▶</button>
@@ -194,7 +194,7 @@
       <div class="divider">CONTINUE</div>
 
       <div class="px-card">
-        <div class="px-label">LOAD GROUP</div>
+        <div class="px-label">LOAD GAME</div>
         <input type="text" id="joinGroupId" placeholder="グループID" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
         <button class="btn-px btn-primary" onclick="joinGroup()">JOIN ▶</button>
       </div>
@@ -244,10 +244,16 @@
 
         <div class="section" id="rankingSection" style="display:none">
           <div class="section-label">🏆 LION RUN ランキング</div>
+          <div style="font-size:11px;color:var(--accent);margin-bottom:4px;">🦁 LION RUN</div>
           <div style="font-size:11px;color:var(--muted);margin-bottom:6px;">今日のベスト</div>
           <div class="ranking-list" id="dailyRanking"></div>
           <div style="font-size:11px;color:var(--muted);margin:10px 0 6px;">歴代ベスト</div>
           <div class="ranking-list" id="allTimeRanking"></div>
+          <div style="font-size:11px;color:var(--accent4);margin:12px 0 4px;">🥊 TAP ATTACK</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:6px;">今日のベスト</div>
+          <div class="ranking-list" id="tapDailyRanking"></div>
+          <div style="font-size:11px;color:var(--muted);margin:10px 0 6px;">歴代ベスト</div>
+          <div class="ranking-list" id="tapAllTimeRanking"></div>
         </div>
 
       </div>
@@ -306,8 +312,25 @@
         <div style="font-family:'Press Start 2P',monospace;font-size:9px;color:var(--accent2);margin-bottom:8px;">GAME OVER</div>
         <div style="font-size:13px;color:var(--muted);margin-bottom:12px;" id="finalScoreMsg"></div>
         <button class="game-btn" onclick="restartGame()" style="margin-bottom:8px;">RETRY ▶</button>
+        <button class="game-btn" onclick="switchToTapGame()" style="background:var(--accent4);margin-top:4px;">🥊 連打ゲームへ</button>
       </div>
     </div>
+
+    <!-- 連打ゲーム画面 -->
+    <div id="tapScreen" style="display:none;flex:1;flex-direction:column;align-items:center;padding:20px;gap:14px">
+      <div style="font-family:'Press Start 2P',monospace;font-size:8px;color:var(--accent4);">TAP ATTACK</div>
+      <div style="font-size:12px;color:var(--muted);">10秒間で何回連打できる？</div>
+      <div class="game-score-display" id="tapCountDisplay">0 回</div>
+      <div class="game-score-display" id="tapTimerDisplay" style="color:var(--accent2);">10.0 秒</div>
+      <button class="game-btn" id="tapBtn" onclick="onTap()" style="background:var(--accent4);box-shadow:4px 4px 0 #664400;height:100px;font-size:20px;">TAP！</button>
+      <div id="tapResultMsg" style="display:none;text-align:center;">
+        <div style="font-family:'Press Start 2P',monospace;font-size:9px;color:var(--accent3);margin-bottom:8px;">RESULT</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:12px;" id="tapFinalMsg"></div>
+        <button class="game-btn" onclick="startTapGame()" style="background:var(--accent4);margin-bottom:8px;">RETRY ▶</button>
+        <button class="game-btn" onclick="switchToLionGame()" style="margin-top:4px;">🦁 ライオンランへ</button>
+      </div>
+    </div>
+
   </div>
 
   <!-- ランキング画面（メンバー設定内に表示） -->
@@ -340,7 +363,7 @@
         <div style="font-size:11px;color:var(--muted);">ニックネーム（グループに登録済みのもの）</div>
         <input type="text" id="regNickname" placeholder="例: しふた" autocomplete="off">
         <div style="font-size:11px;color:var(--muted);">時給（円）</div>
-        <input type="number" id="regWage" placeholder="1250">
+        <input type="number" id="regWage" placeholder="1200">
         <div style="font-size:11px;color:var(--muted);">交通費（往復・円）</div>
         <input type="number" id="regCommute" placeholder="400">
         <div style="font-size:11px;color:var(--muted);">ニックネームカラー</div>
@@ -367,7 +390,7 @@
       <div class="px-card">
         <div class="px-label">設定</div>
         <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">時給（円）</div>
-        <input type="number" id="myWage" placeholder="1250">
+        <input type="number" id="myWage" placeholder="1200">
         <div style="font-size:11px;color:var(--muted);margin-bottom:4px;margin-top:8px;">交通費（往復・円）</div>
         <input type="number" id="myCommute" placeholder="400">
         <div style="font-size:11px;color:var(--muted);margin-bottom:6px;margin-top:8px;">ニックネームカラー</div>
@@ -630,7 +653,6 @@ function openGameSetup(id){
   document.getElementById('gameOverlay').classList.remove('hidden');
   document.getElementById('gameSetup').style.display='flex';
   document.getElementById('gameScreen').style.display='none';
-  document.getElementById('gameGroupIdInput').value = id;
   // 保存済みの情報を復元
   const saved = localStorage.getItem('gameProfile');
   if(saved){
@@ -766,8 +788,8 @@ function initGame(){
     nextObstacle--;
     if(nextObstacle <= 0){
       spawnObstacle();
-      nextObstacle = Math.floor(60 + Math.random()*60 - score/20);
-      nextObstacle = Math.max(nextObstacle, 30);
+      nextObstacle = Math.floor(80 + Math.random()*60 - score/50);
+      nextObstacle = Math.max(nextObstacle, 40);
     }
     for(const obs of obstacles) obs.x -= speed;
     obstacles = obstacles.filter(o => o.x > -30);
@@ -857,15 +879,21 @@ async function gameOver(score){
 
 async function loadRanking(gid){
   try{
-    const r = await fetch(`/api/game?action=ranking&groupId=${encodeURIComponent(gid)}`);
-    const d = await r.json();
-    renderRanking('dailyRanking', d.daily||[]);
-    renderRanking('allTimeRanking', d.allTime||[]);
+    // ライオンラン
+    const r1 = await fetch(`/api/game?action=ranking&groupId=${encodeURIComponent(gid)}&gameType=lion`);
+    const d1 = await r1.json();
+    renderRanking('dailyRanking', d1.daily||[], 'm');
+    renderRanking('allTimeRanking', d1.allTime||[], 'm');
+    // 連打ゲーム
+    const r2 = await fetch(`/api/game?action=ranking&groupId=${encodeURIComponent(gid)}&gameType=tap`);
+    const d2 = await r2.json();
+    renderRanking('tapDailyRanking', d2.daily||[], '回');
+    renderRanking('tapAllTimeRanking', d2.allTime||[], '回');
     document.getElementById('rankingSection').style.display='block';
   }catch(e){}
 }
 
-function renderRanking(containerId, scores){
+function renderRanking(containerId, scores, unit="m"){
   const el = document.getElementById(containerId);
   if(!el) return;
   if(!scores.length){ el.innerHTML='<div style="font-size:12px;color:var(--muted);">まだデータなし</div>'; return; }
@@ -873,8 +901,11 @@ function renderRanking(containerId, scores){
   el.innerHTML = scores.slice(0,10).map((s,i)=>`
     <div class="ranking-row">
       <span class="rank-badge rank-${i+1}">${medals[i]||i+1}</span>
-      <span class="rank-name">${esc(s.nickname)}</span>
-      <span class="rank-score">${s.score}m</span>
+      <span class="rank-name" style="display:flex;flex-direction:column;gap:2px;">
+        <span>${esc(s.nickname)}</span>
+        <span style="font-size:10px;color:var(--muted);">${s.date||''} ${s.time||''}</span>
+      </span>
+      <span class="rank-score">${s.score}${unit}</span>
     </div>`).join('');
 }
 
@@ -905,21 +936,10 @@ const LUCKY_ITEMS = [
 
 function openFortune(){
   const today = new Date();
-  let seed = today.getFullYear()*10000 + (today.getMonth()+1)*100 + today.getDate();
-
-  // 【追加】ブラウザごとに固有のランダムIDを生成してシードに加算
-  let userUniqueKey = localStorage.getItem('fortune_user_key');
-  if (!userUniqueKey) {
-    userUniqueKey = Math.floor(Math.random() * 1000000).toString();
-    localStorage.setItem('fortune_user_key', userUniqueKey);
-  }
-  seed += parseInt(userUniqueKey, 10);
-
-  // シード付き乱数
+  const seed = today.getFullYear()*10000 + (today.getMonth()+1)*100 + today.getDate();
+  
+  // シード付き乱数（同じ日は同じ結果）
   function seededRand(s){ let x=Math.sin(s)*10000; return x-Math.floor(x); }
-
-  // 〜〜（以降の処理はそのまま）〜〜
-
   
   const isTriple = today.getDate()%3===0;
   let raw = seededRand(seed)*10; // 0〜10
@@ -946,6 +966,77 @@ function closeFortune(e){
   if(!e || e.target.id==='fortuneOverlay'){
     document.getElementById('fortuneOverlay').classList.add('hidden');
   }
+}
+
+// ===== 連打ゲーム =====
+let tapCount = 0;
+let tapTimer = null;
+let tapRunning = false;
+let tapTimeLeft = 10.0;
+
+function switchToTapGame(){
+  document.getElementById('gameScreen').style.display='none';
+  document.getElementById('tapScreen').style.display='flex';
+  document.getElementById('tapResultMsg').style.display='none';
+  document.getElementById('tapBtn').disabled=false;
+  tapCount=0; tapTimeLeft=10.0;
+  document.getElementById('tapCountDisplay').textContent='0 回';
+  document.getElementById('tapTimerDisplay').textContent='10.0 秒';
+  tapRunning=false;
+}
+
+function switchToLionGame(){
+  document.getElementById('tapScreen').style.display='none';
+  document.getElementById('gameScreen').style.display='flex';
+  document.getElementById('gameOverMsg').style.display='none';
+  document.getElementById('jumpBtn').style.display='block';
+  initGame();
+}
+
+function onTap(){
+  if(tapRunning){
+    tapCount++;
+    document.getElementById('tapCountDisplay').textContent=tapCount+' 回';
+    return;
+  }
+  // 最初のタップでゲーム開始
+  tapRunning=true;
+  tapCount=1;
+  tapTimeLeft=10.0;
+  document.getElementById('tapCountDisplay').textContent='1 回';
+  tapTimer=setInterval(()=>{
+    tapTimeLeft=Math.max(0, tapTimeLeft-0.1);
+    document.getElementById('tapTimerDisplay').textContent=tapTimeLeft.toFixed(1)+' 秒';
+    if(tapTimeLeft<=0){
+      clearInterval(tapTimer);
+      tapRunning=false;
+      endTapGame();
+    }
+  },100);
+}
+
+async function endTapGame(){
+  document.getElementById('tapBtn').disabled=true;
+  document.getElementById('tapFinalMsg').textContent=tapCount+'回！';
+  document.getElementById('tapResultMsg').style.display='block';
+
+  if(gameGroupId && gameNickname){
+    try{
+      await fetch('/api/game?action=score',{
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({userId:gameUserId, nickname:gameNickname, score:tapCount, groupId:gameGroupId, gameType:'tap'})
+      });
+      loadRanking(gameGroupId);
+    }catch(e){}
+  }
+}
+
+function startTapGame(){
+  document.getElementById('tapResultMsg').style.display='none';
+  document.getElementById('tapBtn').disabled=false;
+  tapCount=0; tapTimeLeft=10.0; tapRunning=false;
+  document.getElementById('tapCountDisplay').textContent='0 回';
+  document.getElementById('tapTimerDisplay').textContent='10.0 秒';
 }
 
 // ===== ユーティリティ =====
