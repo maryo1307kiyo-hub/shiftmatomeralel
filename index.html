@@ -134,6 +134,20 @@
     .status-bar{position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:var(--px) solid var(--border);padding:6px 14px;display:flex;justify-content:space-between;font-size:11px;color:var(--muted);z-index:98}
     .toast{position:fixed;bottom:36px;left:50%;transform:translateX(-50%);background:var(--surface);color:var(--accent3);font-size:12px;padding:8px 16px;border:var(--px) solid var(--accent3);box-shadow:3px 3px 0 #224433;z-index:999;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .2s}
     .toast.show{opacity:1}
+
+    /*ゲーム*/
+   
+.game-box-wrap { margin: 10px 14px 4px 14px; }
+.game-click-btn {
+  width: 80px; height: 80px; border-radius: 50%; background: var(--accent2); 
+  border: var(--px) solid #fff; color: #fff; font-size: 14px; font-weight: bold; cursor: pointer; 
+  box-shadow: 3px 3px 0 #000; display: inline-flex; align-items: center; justify-content: center; 
+  font-family: 'Press Start 2P', monospace; user-select: none; -webkit-user-select: none;
+}
+.game-click-btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 #000; }
+.rank-table { width: 100%; font-size: 12px; border-collapse: collapse; margin-top: 6px; }
+.rank-table th, .rank-table td { padding: 4px 0; text-align: left; border-bottom: 1px dashed var(--border); }
+.rank-table th { color: var(--muted); font-weight: normal; font-family: 'Press Start 2P', monospace; font-size: 7px; }
   </style>
 </head>
 <body>
@@ -291,6 +305,31 @@
       </div>
 
       <button class="btn-px btn-red" onclick="logoutMypage()" style="width:100%;margin-top:8px;">ログアウト</button>
+
+      <div id="gameZone" class="px-card game-box-wrap" style="display:none; border-color:var(--accent2);">
+  <div class="px-label" style="color:var(--accent2); display:flex; justify-content:space-between;">
+    <span>MINI GAME: 10SEC RENDA</span>
+    <span id="gameCloseX" style="cursor:pointer;" onclick="document.getElementById('gameZone').style.display='none'">[X]</span>
+  </div>
+  
+  <div id="gamePreAuth" style="display:block; font-size:12px; text-align:center; padding:6px 0; color:var(--muted);">
+    ゲームを遊ぶにはマイページからログインまたは新規登録を行ってください。
+  </div>
+  
+  <div id="gamePlayArea" style="display:none; text-align:center;">
+    <div style="font-size:11px; color:var(--muted); margin-bottom:8px;">
+      TIME: <span id="gameTimer" style="color:#fff; font-family:'Press Start 2P'; font-size:9px;">10.0</span>s | 
+      SCORE: <span id="gameScore" style="color:var(--accent4); font-family:'Press Start 2P'; font-size:9px;">0</span>
+    </div>
+    <button class="game-click-btn" id="gameHitBtn" onclick="countClick()">HIT!</button>
+    
+    <div class="px-label" style="margin-top:12px; font-size:6px; text-align:left;">GROUP RANKING (TOP 5)</div>
+    <table class="rank-table">
+      <thead><tr><th style="width:20%">RANK</th><th style="width:50%">NAME</th><th style="width:30%">SCORE</th></tr></thead>
+      <tbody id="rankTbody"></tbody>
+    </table>
+  </div>
+</div>
     </div>
   </div>
 </div>
@@ -737,6 +776,110 @@ document.querySelectorAll('.tab').forEach(tab=>{
 // 起動
 const savedId=localStorage.getItem('shiftGroupId');
 if(savedId) enterGroup(savedId);
+  // ==========================================
+// ミニゲーム用拡張コアロジック
+// ==========================================
+let gameScore = 0, gameTimer = null, gameTimeLeft = 10.0, isGaming = false;
+
+// 1. グループIDが1〜10の時だけゲームを表示する判定
+async function checkGameDisplay() {
+  const currentId = typeof groupId !== 'undefined' ? groupId : (typeof currentGroupId !== 'undefined' ? currentGroupId : null);
+  const isGameGroup = /^(?:[1-9]|10)$/.test(currentId);
+  if (isGameGroup) {
+    document.getElementById('gameZone').style.display = 'block';
+    checkGameAuth();
+    await refreshRanking();
+  } else {
+    document.getElementById('gameZone').style.display = 'none';
+  }
+}
+
+// 2. マイページログイン状態のチェック
+function checkGameAuth() {
+  const isLocalStorageUser = localStorage.getItem('myUserId');
+  const hasMyData = (typeof myData !== 'undefined' && myData);
+  if (hasMyData && isLocalStorageUser) {
+    document.getElementById('gamePreAuth').style.display = 'none';
+    document.getElementById('gamePlayArea').style.display = 'block';
+  } else {
+    document.getElementById('gamePreAuth').style.display = 'block';
+    document.getElementById('gamePlayArea').style.display = 'none';
+  }
+}
+
+// 3. 連打カウント処理
+function countClick() {
+  if (typeof myData === 'undefined' || !myData) return;
+  if (!isGaming) {
+    isGaming = true;
+    gameScore = 1;
+    gameTimeLeft = 10.0;
+    document.getElementById('gameScore').innerText = gameScore;
+    document.getElementById('gameHitBtn').innerText = 'PUSH!';
+    gameTimer = setInterval(() => {
+      gameTimeLeft -= 0.1;
+      if (gameTimeLeft <= 0) {
+        gameTimeLeft = 0;
+        clearInterval(gameTimer);
+        endGame();
+      }
+      document.getElementById('gameTimer').innerText = gameTimeLeft.toFixed(1);
+    }, 100);
+  } else {
+    gameScore++;
+    document.getElementById('gameScore').innerText = gameScore;
+  }
+}
+
+// 4. ゲーム終了・スコア保存
+async function endGame() {
+  isGaming = false;
+  document.getElementById('gameHitBtn').innerText = 'FINISH!';
+  const finalScore = gameScore;
+  
+  if (typeof showToast === 'function') showToast(`記録: ${finalScore}連打！`);
+  else if (typeof toast === 'function') toast(`記録: ${finalScore}連打！`);
+  
+  const uid = localStorage.getItem('myUserId');
+  const currentId = typeof groupId !== 'undefined' ? groupId : (typeof currentGroupId !== 'undefined' ? currentGroupId : null);
+  if (!uid || !myData) return;
+  
+  try {
+    await fetch(`/api/game?groupId=${encodeURIComponent(currentId)}&action=submit`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ userId: uid, nickname: myData.nickname, score: finalScore })
+    });
+    await refreshRanking();
+  } catch(e) { console.error(e); }
+  
+  setTimeout(() => {
+    document.getElementById('gameHitBtn').innerText = 'RETRY';
+    document.getElementById('gameTimer').innerText = '10.0';
+  }, 1500);
+}
+
+// 5. ランキングのリアルタイム取得
+async function refreshRanking() {
+  const currentId = typeof groupId !== 'undefined' ? groupId : (typeof currentGroupId !== 'undefined' ? currentGroupId : null);
+  if (!currentId) return;
+  try {
+    const res = await fetch(`/api/game?groupId=${encodeURIComponent(currentId)}`);
+    const data = await res.json();
+    const tbody = document.getElementById('rankTbody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    const list = data.ranking || [];
+    if (list.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--muted);font-size:11px;">まだ記録がありません</td></tr>';
+      return;
+    }
+    const localEsc = (s) => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    list.slice(0, 5).forEach((item, idx) => {
+      tbody.innerHTML += `<tr><td style="font-family:'Press Start 2P'; font-size:7px; color:var(--accent4); padding:4px 0;">#${idx+1}</td><td style="font-weight:bold; padding:4px 0;">${localEsc(item.nickname)}</td><td style="font-family:'Press Start 2P'; font-size:7px; padding:4px 0;">${item.score}</td></tr>`;
+    });
+  } catch(e) { console.error(e); }
+}
 </script>
 </body>
 </html>
