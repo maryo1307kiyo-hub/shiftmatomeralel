@@ -117,6 +117,32 @@
     .pill-pending .pill-time{color:#bb774466}
     .pill-label{font-size:7px;border:var(--px) solid #cc8855;padding:0 2px;color:#cc8855;font-family:'Press Start 2P',monospace}
 
+    /* 占い */
+    .fortune-overlay{position:fixed;inset:0;background:#00000099;z-index:400;display:flex;align-items:flex-end}
+    .fortune-overlay.hidden{display:none}
+    .fortune-sheet{background:var(--bg);border-top:var(--px) solid var(--accent);width:100%;padding:20px;display:flex;flex-direction:column;gap:14px;align-items:center}
+    .fortune-stars{font-size:22px;letter-spacing:2px;margin:4px 0}
+    .fortune-item{font-family:'Press Start 2P',monospace;font-size:9px;color:var(--accent4);text-align:center;line-height:2}
+    .fortune-msg{font-size:13px;color:var(--muted);text-align:center}
+    .fortune-btn{position:fixed;bottom:44px;left:14px;width:44px;height:44px;background:var(--surface);border:var(--px) solid var(--accent4);box-shadow:3px 3px 0 #664400;display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;z-index:97}
+    .fortune-btn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 #664400}
+    /* ゲーム */
+    .game-overlay{position:fixed;inset:0;background:var(--bg);z-index:300;display:flex;flex-direction:column}
+    .game-overlay.hidden{display:none}
+    .game-header{background:var(--surface);border-bottom:var(--px) solid var(--accent);padding:8px 14px;display:flex;align-items:center;justify-content:space-between}
+    .game-title{font-family:'Press Start 2P',monospace;font-size:8px;color:var(--accent)}
+    #gameCanvas{display:block;width:100%;background:#080814;border-bottom:var(--px) solid var(--border)}
+    .game-ui{padding:12px 14px;display:flex;flex-direction:column;gap:10px;flex:1;overflow-y:auto}
+    .game-score-display{font-family:'Press Start 2P',monospace;font-size:10px;color:var(--accent3);text-align:center}
+    .game-btn{font-family:'DotGothic16',monospace;font-size:16px;padding:14px;background:var(--accent);color:#fff;border:none;width:100%;cursor:pointer;box-shadow:4px 4px 0 #2a4477;font-weight:bold}
+    .game-btn:active{transform:translate(2px,2px);box-shadow:2px 2px 0 #2a4477}
+    .ranking-list{display:flex;flex-direction:column;gap:6px}
+    .ranking-row{display:flex;align-items:center;gap:10px;padding:6px 10px;background:var(--surface);border:var(--px) solid var(--border)}
+    .rank-badge{font-family:'Press Start 2P',monospace;font-size:8px;min-width:24px;text-align:center}
+    .rank-1{color:#ffcc00}.rank-2{color:#aaaaaa}.rank-3{color:#cc7744}
+    .rank-name{flex:1;font-size:13px}
+    .rank-score{font-family:'Press Start 2P',monospace;font-size:8px;color:var(--accent3)}
+    .game-setup{padding:20px;display:flex;flex-direction:column;gap:12px;max-width:380px;margin:0 auto}
     /* マイページ */
     .mypage-btn{position:fixed;bottom:44px;right:14px;width:44px;height:44px;background:var(--surface);border:var(--px) solid var(--accent);box-shadow:3px 3px 0 #2a4477;display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;z-index:97;border-radius:0}
     .mypage-btn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 #2a4477}
@@ -216,6 +242,14 @@
           </div>
         </div>
 
+        <div class="section" id="rankingSection" style="display:none">
+          <div class="section-label">🏆 LION RUN ランキング</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:6px;">今日のベスト</div>
+          <div class="ranking-list" id="dailyRanking"></div>
+          <div style="font-size:11px;color:var(--muted);margin:10px 0 6px;">歴代ベスト</div>
+          <div class="ranking-list" id="allTimeRanking"></div>
+        </div>
+
       </div>
     </div>
   </div>
@@ -228,6 +262,56 @@
 </div>
 <div class="toast" id="toast"></div>
 <button class="mypage-btn" onclick="openMypage()" title="マイページ">👤</button>
+
+<!-- 占いボタン -->
+<button class="fortune-btn" onclick="openFortune()" title="今日の運勢">🔮</button>
+
+<!-- 占いモーダル -->
+<div class="fortune-overlay hidden" id="fortuneOverlay" onclick="closeFortune(event)">
+  <div class="fortune-sheet" id="fortuneSheet">
+    <div style="font-family:'Press Start 2P',monospace;font-size:8px;color:var(--accent4);">TODAY'S FORTUNE</div>
+    <div class="fortune-stars" id="fortuneStars"></div>
+    <div class="fortune-item" id="fortuneItem"></div>
+    <div class="fortune-msg">今日も一日、頑張りましょう♪</div>
+    <button class="btn-px btn-ghost btn-sm" onclick="closeFortune()">閉じる</button>
+  </div>
+</div>
+
+<!-- ゲームオーバーレイ -->
+<div class="game-overlay hidden" id="gameOverlay">
+  <div class="game-header">
+    <span class="game-title">LION RUN</span>
+    <button class="btn-px btn-red btn-sm" onclick="exitGame()">EXIT</button>
+  </div>
+  
+  <!-- セットアップ画面 -->
+  <div id="gameSetup" class="game-setup">
+    <div style="font-family:'Press Start 2P',monospace;font-size:9px;color:var(--accent3);text-align:center;line-height:2">LION RUN<br>障害物を避けろ！</div>
+    <div style="font-size:11px;color:var(--muted);">ニックネーム</div>
+    <input type="text" id="gameNickname" placeholder="例: みき" autocomplete="off">
+    <div style="font-size:11px;color:var(--muted);">マイID（スコア保存用・任意）</div>
+    <input type="text" id="gameUserId" placeholder="例: shiftarou2026" autocomplete="off" autocorrect="off" autocapitalize="off">
+    <div style="font-size:11px;color:var(--muted);">ランキンググループID</div>
+    <input type="text" id="gameGroupIdInput" placeholder="0〜9" autocomplete="off">
+    <button class="game-btn" onclick="startGame()">GAME START ▶</button>
+  </div>
+
+  <!-- ゲーム画面 -->
+  <div id="gameScreen" style="display:none;flex:1;display:none;flex-direction:column">
+    <canvas id="gameCanvas" height="180"></canvas>
+    <div class="game-ui">
+      <div class="game-score-display" id="gameScoreDisplay">0 m</div>
+      <button class="game-btn" id="jumpBtn" onclick="jump()">JUMP ▶</button>
+      <div id="gameOverMsg" style="display:none;text-align:center;">
+        <div style="font-family:'Press Start 2P',monospace;font-size:9px;color:var(--accent2);margin-bottom:8px;">GAME OVER</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:12px;" id="finalScoreMsg"></div>
+        <button class="game-btn" onclick="restartGame()" style="margin-bottom:8px;">RETRY ▶</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ランキング画面（メンバー設定内に表示） -->
+</div>
 
 <!-- マイページモーダル -->
 <div class="modal-overlay hidden" id="mypageModal" onclick="closeMypageModal(event)">
@@ -242,7 +326,7 @@
       <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">マイIDでログインすると給料計算などができます</div>
       <div style="display:flex;flex-direction:column;gap:8px;">
         <div style="font-size:11px;color:var(--muted);">マイID（英数字6文字以上）</div>
-        <input type="text" id="myUserId" placeholder="例: shift1234" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+        <input type="text" id="myUserId" placeholder="例: kiyoshift2026" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
         <button class="btn-px btn-primary" onclick="loginMypage()">ログイン / 新規登録</button>
       </div>
     </div>
@@ -254,9 +338,9 @@
         <div style="font-size:11px;color:var(--muted);">グループID</div>
         <input type="text" id="regGroupId" placeholder="グループID" autocomplete="off" autocorrect="off" autocapitalize="off">
         <div style="font-size:11px;color:var(--muted);">ニックネーム（グループに登録済みのもの）</div>
-        <input type="text" id="regNickname" placeholder="例: しふた" autocomplete="off">
+        <input type="text" id="regNickname" placeholder="例: みき" autocomplete="off">
         <div style="font-size:11px;color:var(--muted);">時給（円）</div>
-        <input type="number" id="regWage" placeholder="1250">
+        <input type="number" id="regWage" placeholder="1200">
         <div style="font-size:11px;color:var(--muted);">交通費（往復・円）</div>
         <input type="number" id="regCommute" placeholder="400">
         <div style="font-size:11px;color:var(--muted);">ニックネームカラー</div>
@@ -272,10 +356,11 @@
         <span style="font-size:11px;color:var(--muted);" id="myGroupDisplay"></span>
       </div>
 
-      <!-- 今月の給料 -->
+      <!-- ステータス -->
       <div class="px-card" style="margin-bottom:10px;">
-        <div class="px-label">今月の給料（予定）</div>
-        <div id="salaryBreakdown" style="display:flex;flex-direction:column;gap:4px;"></div>
+        <div class="px-label">TODAY</div>
+        <div class="stat-row"><span class="stat-label">🦁 LION RUN 本日順位</span><span class="stat-value" id="myRankDisplay">-</span></div>
+        <div id="salaryBreakdown" style="display:flex;flex-direction:column;gap:4px;margin-top:8px;"></div>
       </div>
 
       <!-- 設定 -->
@@ -306,6 +391,7 @@ let members=[], groupId=null, loadingMsgTimer=null, lastShiftData=null, lastResu
 function createGroup(){
   const id=document.getElementById('newGroupId').value.trim();
   if(!id){ showToast('グループIDを入力してください'); return; }
+  if(/^\d$/.test(id)){ openGameSetup(id); return; }
   if(!/^[a-zA-Z0-9_-]+$/.test(id)){ showToast('英数字・ハイフン・アンダーバーのみ使えます'); return; }
   enterGroup(id);
 }
@@ -313,6 +399,7 @@ function createGroup(){
 function joinGroup(){
   const id=document.getElementById('joinGroupId').value.trim();
   if(!id){ showToast('グループIDを入力してください'); return; }
+  if(/^\d$/.test(id)){ openGameSetup(id); return; }
   enterGroup(id);
 }
 
@@ -381,8 +468,6 @@ async function addMember(){
 }
 
 async function removeMember(url,name){
-  if(!confirm(`${name} を削除しますか？`)) return;
-
   try{
     const r=await fetch(`/api/groups?groupId=${encodeURIComponent(groupId)}&action=remove`,{
       method:'POST',headers:{'Content-Type':'application/json'},
@@ -532,6 +617,325 @@ function exportMemberCal(memberName){
   navigator.clipboard.writeText(calUrl).then(()=>showToast('カレンダーURLをコピーしました！'));
 }
 
+
+// ===== ゲーム =====
+let gameState = null;
+let gameLoop = null;
+let gameGroupId = null;
+let gameNickname = null;
+let gameUserId = null;
+
+function openGameSetup(id){
+  gameGroupId = id;
+  document.getElementById('gameOverlay').classList.remove('hidden');
+  document.getElementById('gameSetup').style.display='flex';
+  document.getElementById('gameScreen').style.display='none';
+  document.getElementById('gameGroupIdInput').value = id;
+  // 保存済みの情報を復元
+  const saved = localStorage.getItem('gameProfile');
+  if(saved){
+    const p = JSON.parse(saved);
+    document.getElementById('gameNickname').value = p.nickname||'';
+    document.getElementById('gameUserId').value = p.userId||'';
+  }
+  loadRanking(id);
+}
+
+function exitGame(){
+  if(gameLoop) clearInterval(gameLoop);
+  gameLoop = null;
+  document.getElementById('gameOverlay').classList.add('hidden');
+}
+
+function startGame(){
+  const nick = document.getElementById('gameNickname').value.trim();
+  const uid = document.getElementById('gameUserId').value.trim();
+  const gid = document.getElementById('gameGroupIdInput').value.trim();
+  if(!nick){ showToast('ニックネームを入力してください'); return; }
+  gameNickname = nick;
+  gameUserId = uid || ('guest_'+Math.random().toString(36).slice(2,8));
+  gameGroupId = gid || gameGroupId;
+  localStorage.setItem('gameProfile', JSON.stringify({nickname:nick, userId:uid}));
+  document.getElementById('gameSetup').style.display='none';
+  document.getElementById('gameScreen').style.display='flex';
+  document.getElementById('gameOverMsg').style.display='none';
+  document.getElementById('jumpBtn').style.display='block';
+  initGame();
+}
+
+function restartGame(){
+  document.getElementById('gameOverMsg').style.display='none';
+  document.getElementById('jumpBtn').style.display='block';
+  initGame();
+}
+
+// ゲームエンジン
+function initGame(){
+  if(gameLoop) clearInterval(gameLoop);
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = canvas.offsetWidth;
+  const W = canvas.width, H = canvas.height;
+
+  const GROUND = H - 30;
+  const GRAVITY = 0.6;
+  const JUMP_FORCE = -12;
+  const SPEED_INIT = 4;
+  const SPEED_MAX = 12;
+
+  let score = 0; // meters
+  let frame = 0;
+  let speed = SPEED_INIT;
+  let running = true;
+
+  // ライオン
+  let lion = { x: 60, y: GROUND, vy: 0, onGround: true, w: 24, h: 24 };
+
+  // 障害物
+  let obstacles = [];
+  let nextObstacle = 80;
+
+  // 地面のドット
+  let dots = [];
+  for(let i=0;i<Math.ceil(W/16)+1;i++) dots.push(i*16);
+
+  function spawnObstacle(){
+    const h = 16 + Math.floor(Math.random()*24);
+    obstacles.push({x:W+10, y:GROUND-h+lion.h, w:14, h});
+  }
+
+  function drawPixelRect(x,y,w,h,color){
+    ctx.fillStyle=color;
+    ctx.fillRect(Math.round(x),Math.round(y),w,h);
+  }
+
+  function drawLion(x,y){
+    // シンプルなピクセルライオン
+    const c1='#cc8855', c2='#ffcc66', c3='#000';
+    // 体
+    drawPixelRect(x+4,y+10,16,12,c1);
+    // 頭
+    drawPixelRect(x+6,y+2,12,12,c2);
+    // たてがみ
+    drawPixelRect(x+2,y+0,20,10,c1);
+    // 目
+    drawPixelRect(x+9,y+5,2,2,c3);
+    drawPixelRect(x+14,y+5,2,2,c3);
+    // 口
+    drawPixelRect(x+10,y+9,4,2,c3);
+    // 脚（走るアニメ）
+    const legFrame = Math.floor(frame/6)%2;
+    if(legFrame===0){
+      drawPixelRect(x+6,y+20,4,8,c1);
+      drawPixelRect(x+14,y+20,4,8,c1);
+    } else {
+      drawPixelRect(x+4,y+20,4,8,c1);
+      drawPixelRect(x+16,y+20,4,8,c1);
+    }
+    // 尻尾
+    drawPixelRect(x+20,y+12,6,4,c1);
+    drawPixelRect(x+24,y+8,4,4,c1);
+  }
+
+  function drawObstacle(obs){
+    // 岩っぽい障害物
+    drawPixelRect(obs.x,obs.y,obs.w,obs.h,'#445566');
+    drawPixelRect(obs.x+2,obs.y+2,obs.w-4,4,'#556677');
+  }
+
+  function update(){
+    if(!running) return;
+    frame++;
+    // ジャンプフラグ確認
+    if(window._gameJump){ window._gameJump=false; if(lion.onGround){ lion.vy=JUMP_FORCE; lion.onGround=false; } }
+    speed = Math.min(SPEED_INIT + score/200, SPEED_MAX);
+    score += speed/60;
+
+    // ライオン物理
+    lion.vy += GRAVITY;
+    lion.y += lion.vy;
+    if(lion.y >= GROUND){
+      lion.y = GROUND;
+      lion.vy = 0;
+      lion.onGround = true;
+    } else {
+      lion.onGround = false;
+    }
+
+    // 障害物
+    nextObstacle--;
+    if(nextObstacle <= 0){
+      spawnObstacle();
+      nextObstacle = Math.floor(80 + Math.random()*60 - score/50);
+      nextObstacle = Math.max(nextObstacle, 40);
+    }
+    for(const obs of obstacles) obs.x -= speed;
+    obstacles = obstacles.filter(o => o.x > -30);
+
+    // 当たり判定
+    for(const obs of obstacles){
+      if(lion.x+4 < obs.x+obs.w && lion.x+lion.w-4 > obs.x &&
+         lion.y+4 < obs.y+obs.h && lion.y+lion.h > obs.y+4){
+        running = false;
+        gameOver(Math.floor(score));
+        return;
+      }
+    }
+
+    // 地面ドット
+    dots = dots.map(d => d - speed);
+    if(dots[0] < -16) dots.push(dots[dots.length-1]+16);
+    dots = dots.filter(d => d < W+16);
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    // 背景
+    ctx.fillStyle='#080814';
+    ctx.fillRect(0,0,W,H);
+    // 地面
+    ctx.fillStyle='#2a2a4a';
+    ctx.fillRect(0,GROUND+lion.h,W,H-(GROUND+lion.h));
+    // 地面ドット
+    ctx.fillStyle='#3a3a5a';
+    for(const d of dots) ctx.fillRect(Math.round(d),GROUND+lion.h+2,8,2);
+    // 障害物
+    for(const obs of obstacles) drawObstacle(obs);
+    // ライオン
+    drawLion(lion.x, lion.y);
+    // スコア
+    ctx.fillStyle='#5588cc';
+    ctx.font='bold 12px monospace';
+    ctx.fillText(Math.floor(score)+'m', W-60, 20);
+  }
+
+  gameLoop = setInterval(()=>{
+    update();
+    draw();
+    document.getElementById('gameScoreDisplay').textContent = Math.floor(score)+' m';
+  }, 1000/60);
+}
+
+function jump(){
+  const canvas = document.getElementById('gameCanvas');
+  // ジャンプイベントをゲームに送る
+  window._gameJump = true;
+}
+
+// ジャンプをゲームループに統合する簡易版
+// キャンバスタップでもジャンプ
+document.addEventListener('DOMContentLoaded', ()=>{
+  document.getElementById('gameCanvas').addEventListener('touchstart', e=>{ e.preventDefault(); _doJump(); });
+  document.getElementById('gameCanvas').addEventListener('click', _doJump);
+  document.getElementById('jumpBtn').addEventListener('touchstart', e=>{ e.preventDefault(); _doJump(); });
+});
+
+function _doJump(){
+  // ゲームのライオンに直接アクセスできないので、グローバルフラグ経由
+  window._gameJump = true;
+}
+
+// ゲームオーバー
+async function gameOver(score){
+  if(gameLoop){ clearInterval(gameLoop); gameLoop=null; }
+  document.getElementById('jumpBtn').style.display='none';
+  document.getElementById('finalScoreMsg').textContent = score+'m 走った！';
+  document.getElementById('gameOverMsg').style.display='block';
+  document.getElementById('gameScoreDisplay').textContent = score+' m';
+
+  // スコア送信
+  if(gameGroupId && gameNickname){
+    try{
+      await fetch('/api/game?action=score',{
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({userId:gameUserId, nickname:gameNickname, score, groupId:gameGroupId})
+      });
+      loadRanking(gameGroupId);
+    }catch(e){}
+  }
+}
+
+async function loadRanking(gid){
+  try{
+    const r = await fetch(`/api/game?action=ranking&groupId=${encodeURIComponent(gid)}`);
+    const d = await r.json();
+    renderRanking('dailyRanking', d.daily||[]);
+    renderRanking('allTimeRanking', d.allTime||[]);
+    document.getElementById('rankingSection').style.display='block';
+  }catch(e){}
+}
+
+function renderRanking(containerId, scores){
+  const el = document.getElementById(containerId);
+  if(!el) return;
+  if(!scores.length){ el.innerHTML='<div style="font-size:12px;color:var(--muted);">まだデータなし</div>'; return; }
+  const medals=['🥇','🥈','🥉'];
+  el.innerHTML = scores.slice(0,10).map((s,i)=>`
+    <div class="ranking-row">
+      <span class="rank-badge rank-${i+1}">${medals[i]||i+1}</span>
+      <span class="rank-name">${esc(s.nickname)}</span>
+      <span class="rank-score">${s.score}m</span>
+    </div>`).join('');
+}
+
+async function loadMyRank(){
+  if(!myData||!gameGroupId) return;
+  try{
+    const r = await fetch(`/api/game?action=ranking&groupId=${encodeURIComponent(gameGroupId)}`);
+    const d = await r.json();
+    const daily = d.daily||[];
+    const idx = daily.findIndex(s=>s.userId===myData.userId);
+    const rankEl = document.getElementById('myRankDisplay');
+    if(rankEl) rankEl.textContent = idx>=0 ? (idx+1)+'位' : '-';
+  }catch(e){}
+}
+
+// ===== 占い =====
+const LUCKY_ITEMS = [
+  '定期','折り紙','岩のり','挽肉と米','友情','時折見せる笑顔','猫',
+  'ハイヒール','ハイヒール猫','パントマイムライオン2のLINEスタンプ',
+  '土鍋','フィーゴ','ボンベイサファイア','甲子園のコンクリ',
+  'わさび','山わさび','練りわさび','わさび漬け',
+  'しめじ','七味','窓際','ツーブロック','スリーブロック',
+  'トーキングロックフェス','2ndアルバム','3rdアルバム',
+  '実行委員','生徒会書記','シャツ','柄シャツ',
+  'ズッキーニ','ズッキーナ','ズキモン','フジモン',
+  'ヒール','こどもの国駅'
+];
+
+function openFortune(){
+  const today = new Date();
+  const seed = today.getFullYear()*10000 + (today.getMonth()+1)*100 + today.getDate();
+  
+  // シード付き乱数（同じ日は同じ結果）
+  function seededRand(s){ let x=Math.sin(s)*10000; return x-Math.floor(x); }
+  
+  const isTriple = today.getDate()%3===0;
+  let raw = seededRand(seed)*10; // 0〜10
+  if(isTriple) raw = raw*0.4 + 6; // 3の倍数は高め
+  raw = Math.max(1, Math.min(10, raw));
+  const stars = Math.round(raw)/2; // 0.5〜5
+  
+  // ラッキーアイテム
+  const itemIdx = Math.floor(seededRand(seed+1)*LUCKY_ITEMS.length);
+  const item = LUCKY_ITEMS[itemIdx];
+  
+  // ★表示
+  const full = Math.floor(stars);
+  const half = stars%1 >= 0.5;
+  const empty = 5 - full - (half?1:0);
+  const starStr = '★'.repeat(full) + (half?'½':'') + '☆'.repeat(empty);
+  
+  document.getElementById('fortuneStars').textContent = starStr + ' ' + stars;
+  document.getElementById('fortuneItem').textContent = '🍀 ラッキーアイテム: ' + item;
+  document.getElementById('fortuneOverlay').classList.remove('hidden');
+}
+
+function closeFortune(e){
+  if(!e || e.target.id==='fortuneOverlay'){
+    document.getElementById('fortuneOverlay').classList.add('hidden');
+  }
+}
 
 // ===== ユーティリティ =====
 function copyGroupId(){
@@ -701,12 +1105,13 @@ function calcSalary(){
   const total = basePay+commutePay;
 
   document.getElementById('salaryBreakdown').innerHTML = `
-    <div class="stat-row"><span class="stat-label">勤務時間</span><span class="stat-value">${hours.toFixed(1)}h</span></div>
+    <div class="stat-row"><span class="stat-label">今月の勤務時間</span><span class="stat-value">${hours.toFixed(1)}h</span></div>
     <div class="stat-row"><span class="stat-label">勤務日数</span><span class="stat-value">${workDays}日</span></div>
-    <div class="stat-row"><span class="stat-label">基本給</span><span class="stat-value">¥${basePay.toLocaleString()}</span></div>
-    <div class="stat-row"><span class="stat-label">交通費</span><span class="stat-value">¥${commutePay.toLocaleString()}</span></div>
-    <div class="stat-row" style="border-bottom:none"><span class="stat-label" style="font-weight:bold;color:var(--text);">合計</span><span class="stat-value" style="color:var(--accent3);font-size:11px;">¥${total.toLocaleString()}</span></div>
+    <div class="stat-row" style="border-bottom:none"><span class="stat-label" style="font-weight:bold;color:var(--text);">今月の給与（予定）</span><span class="stat-value" style="color:var(--accent3);font-size:11px;">¥${total.toLocaleString()}</span></div>
+    <div style="font-size:10px;color:var(--muted);margin-top:4px;">基本給 ¥${basePay.toLocaleString()} + 交通費 ¥${commutePay.toLocaleString()}</div>
   `;
+  // ゲームランキングの本日順位を取得
+  loadMyRank();
 }
 
 function applyMemberColor(){
