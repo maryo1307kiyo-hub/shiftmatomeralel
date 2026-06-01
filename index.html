@@ -395,7 +395,7 @@ function renderMembers(){
       <div class="member-dot" style="color:${dotColors[i%8]};border-color:${dotColors[i%8]}"></div>
       <div class="member-info">
         <div class="member-name ${C[i%8]}">${esc(m.name)}</div>
-        <div class="member-url">${esc(m.url)}</div>
+        <div class="member-url">${esc(m.url.replace(/([?&]s=)[^&]+/, '$1****'))}</div>
       </div>
       <button class="btn-px btn-red" onclick="removeMember('${esc(m.url)}','${esc(m.name)}')">DEL</button>
     </div>`).join('');
@@ -444,9 +444,12 @@ function renderShifts(results){
 function copyGroupId(){
   const url=`${location.origin}${location.pathname}?g=${groupId}`;
   const text=`しふとまとめれ～るに招待します！\nグループID: ${groupId}\n${url}`;
-  navigator.clipboard.writeText(text).then(()=>showToast('招待リンクをコピーしました！'));
+  if(navigator.share){
+    navigator.share({title:'しふとまとめれ～る',text});
+  }else{
+    navigator.clipboard.writeText(text).then(()=>showToast('招待リンクをコピーしました！'));
+  }
 }
-
 function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2500); }
 function setStatus(t){ document.getElementById('statusText').textContent=t; }
