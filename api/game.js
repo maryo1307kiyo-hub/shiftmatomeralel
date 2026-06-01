@@ -1,4 +1,5 @@
-// api/game.js - ミニゲーム用スコア管理API
+// api/game.js - ゲームスコア管理API
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -7,10 +8,6 @@ export default async function handler(req, res) {
 
   const UPSTASH_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
   const UPSTASH_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
-
-  if (!UPSTASH_URL || !UPSTASH_TOKEN) {
-    return res.status(500).json({ error: 'DB not configured' });
-  }
 
   async function redisGet(key) {
     const r = await fetch(`${UPSTASH_URL}/get/${encodeURIComponent(key)}`, {
@@ -28,40 +25,57 @@ export default async function handler(req, res) {
     });
   }
 
-  const { groupId, action } = req.query;
-  if (!groupId) return res.status(400).json({ error: 'groupId required' });
+  const { action, groupId } = req.query;
 
-  // グループIDが1〜10（または1〜10の半角数字のみ）であるかを判定
-  const isTargetGroup = /^(?:[1-9]|10)$/.test(groupId);
-  if (!isTargetGroup) {
-    return res.status(403).json({ error: 'Game not available' });
-  }
-
-  const key = `game:ranking:${groupId}`;
-
-  // ランキング取得
-  if (req.method === 'GET') {
-    const rawData = await redisGet(key) || {};
-    const ranking = Object.values(rawData)
-      .map(item => ({ nickname: item.nickname, score: parseInt(item.score, 10) || 0 }))
-      .sort((a, b) => b.score - a.score);
-    return res.status(200).json({ ranking });
-  }
-
-  // スコア保存
-  if (req.method === 'POST' && action === 'submit') {
-    const { userId, nickname, score } = req.body;
-    if (!userId || !nickname || score === undefined) return res.status(400).json({ error: 'Missing data' });
-
-    const userKey = `${groupId}:${nickname}:${userId}`;
-    let currentData = await redisGet(key) || {};
-    const oldScore = currentData[userKey] ? (parseInt(currentData[userKey].score, 10) || 0) : 0;
-
-    if (score > oldScore) {
-      currentData[userKey] = { userId, nickname, score: parseInt(score, 10) };
-      await redisSet(key, currentData);
+  // GET: ランキング取得
+  if (req.method === 'GET' && action === 'ranking') {
+    if (!groupId) return res.status(400).json({ error: 'groupId required' });
+    const scores = await redisGet(`game:ranking:${groupId}`) || [];
+    // 今日の日付
+    const today = new Date().toLocaleDateString('sv-SE');
+    // 日次ランキング（今日のベスト）
+    const dailyMap = {};
+    for (const s of scores) {
+      if (s.date === today) {
+        if (!dailyMap[s.userId] || s.score > dailyMap[s.userId].score) {
+          dailyMap[s.userId] = s;
+        }
+      }
     }
-    return res.status(200).json({ success: true });
+    // 全時間ベスト
+    const allTimeMap = {};
+    for (const s of scores) {
+      if (!allTimeMap[s.userId] || s.score > allTimeMap[s.userId].score) {
+        allTimeMap[s.userId] = s;
+      }
+    }
+    const daily = Object.values(dailyMap).sort((a,b) => b.score - a.score);
+    const allTime = Object.values(allTimeMap).sort((a,b) => b.score - a.score);
+    return res.status(200).json({ daily, allTime });
+  }
+
+  // POST: スコア登録
+  if (req.method === 'POST' && action === 'score') {
+    const { userId, nickname, score, groupId: gid } = req.body;
+    if (!userId || !nickname || !score || !gid) {
+      return res.status(400).json({ error: 'missing fields' });
+    }
+    const key = `game:ranking:${gid}`;
+    const scores = await redisGet(key) || [];
+    const today = new Date().toLocaleDateString('sv-SE');
+    scores.push({ userId, nickname, score: Math.floor(score), date: today, ts: Date.now() });
+    // 最大1000件保持
+    if (scores.length > 1000) scores.splice(0, scores.length - 1000);
+    await redisSet(key, scores);
+
+    // 自己ベスト更新
+    const pbKey = `game:pb:${userId}`;
+    const pb = await redisGet(pbKey);
+    if (!pb || score > pb.score) {
+      await redisSet(pbKey, { score: Math.floor(score), date: today });
+    }
+
+    return res.status(200).json({ ok: true });
   }
 
   return res.status(405).json({ error: 'Method not allowed' });
