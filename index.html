@@ -681,7 +681,7 @@ function initGame(){
   const GRAVITY = 0.6;
   const JUMP_FORCE = -12;
   const SPEED_INIT = 4;
-  const SPEED_MAX = 12;
+  const SPEED_MAX = 20;
 
   let score = 0; // meters
   let frame = 0;
@@ -766,8 +766,8 @@ function initGame(){
     nextObstacle--;
     if(nextObstacle <= 0){
       spawnObstacle();
-      nextObstacle = Math.floor(80 + Math.random()*60 - score/50);
-      nextObstacle = Math.max(nextObstacle, 40);
+      nextObstacle = Math.floor(40 + Math.random(*40 - score/30);
+      nextObstacle = Math.max(nextObstacle, 20);
     }
     for(const obs of obstacles) obs.x -= speed;
     obstacles = obstacles.filter(o => o.x > -30);
@@ -905,10 +905,21 @@ const LUCKY_ITEMS = [
 
 function openFortune(){
   const today = new Date();
-  const seed = today.getFullYear()*10000 + (today.getMonth()+1)*100 + today.getDate();
-  
-  // シード付き乱数（同じ日は同じ結果）
+  let seed = today.getFullYear()*10000 + (today.getMonth()+1)*100 + today.getDate();
+
+  // 【追加】ブラウザごとに固有のランダムIDを生成してシードに加算
+  let userUniqueKey = localStorage.getItem('fortune_user_key');
+  if (!userUniqueKey) {
+    userUniqueKey = Math.floor(Math.random() * 1000000).toString();
+    localStorage.setItem('fortune_user_key', userUniqueKey);
+  }
+  seed += parseInt(userUniqueKey, 10);
+
+  // シード付き乱数
   function seededRand(s){ let x=Math.sin(s)*10000; return x-Math.floor(x); }
+
+
+
   
   const isTriple = today.getDate()%3===0;
   let raw = seededRand(seed)*10; // 0〜10
