@@ -95,7 +95,7 @@ export default async function handler(req, res) {
   lines.push('END:VCALENDAR');
 
   res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
-  res.setHeader('Content-Disposition', `inline; filename="${name}_shift.ics"`);
+  res.setHeader('Content-Disposition', 'inline; filename="shift.ics"');
   res.setHeader('Cache-Control', 'no-cache');
   return res.status(200).send(lines.join('\r\n'));
 }
