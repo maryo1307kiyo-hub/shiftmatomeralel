@@ -30,7 +30,8 @@ export default async function handler(req, res) {
   // GET: ランキング取得
   if (req.method === 'GET' && action === 'ranking') {
     if (!groupId) return res.status(400).json({ error: 'groupId required' });
-    const scores = await redisGet(`game:ranking:${groupId}`) || [];
+    const gameType = req.query.gameType || 'lion';
+    const scores = await redisGet(`game:ranking:${groupId}:${gameType}`) || [];
     // 今日の日付
     const today = new Date().toLocaleDateString('sv-SE');
     // 日次ランキング（今日のベスト）
@@ -56,14 +57,17 @@ export default async function handler(req, res) {
 
   // POST: スコア登録
   if (req.method === 'POST' && action === 'score') {
-    const { userId, nickname, score, groupId: gid } = req.body;
+    const { userId, nickname, score, groupId: gid, gameType } = req.body;
     if (!userId || !nickname || !score || !gid) {
       return res.status(400).json({ error: 'missing fields' });
     }
-    const key = `game:ranking:${gid}`;
+    const type = gameType || 'lion';
+    const key = `game:ranking:${gid}:${type}`;
     const scores = await redisGet(key) || [];
     const today = new Date().toLocaleDateString('sv-SE');
-    scores.push({ userId, nickname, score: Math.floor(score), date: today, ts: Date.now() });
+    const now = new Date();
+    const timeStr = now.getHours().toString().padStart(2,'0')+':'+now.getMinutes().toString().padStart(2,'0');
+    scores.push({ userId, nickname, score: Math.floor(score), date: today, time: timeStr, ts: Date.now() });
     // 最大1000件保持
     if (scores.length > 1000) scores.splice(0, scores.length - 1000);
     await redisSet(key, scores);
@@ -72,7 +76,9 @@ export default async function handler(req, res) {
     const pbKey = `game:pb:${userId}`;
     const pb = await redisGet(pbKey);
     if (!pb || score > pb.score) {
-      await redisSet(pbKey, { score: Math.floor(score), date: today });
+      const now2 = new Date();
+      const timeStr2 = now2.getHours().toString().padStart(2,'0')+':'+now2.getMinutes().toString().padStart(2,'0');
+      await redisSet(pbKey, { score: Math.floor(score), date: today, time: timeStr2 });
     }
 
     return res.status(200).json({ ok: true });
