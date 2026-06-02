@@ -117,6 +117,9 @@
     .pill-pending .pill-time{color:#bb774466}
     .pill-label{font-size:7px;border:var(--px) solid #cc8855;padding:0 2px;color:#cc8855;font-family:'Press Start 2P',monospace}
 
+    /* イベント */
+    .event-tag{font-size:10px;color:var(--accent4);border:var(--px) solid var(--accent4);padding:1px 5px;margin-left:4px;font-family:'DotGothic16',monospace;}
+    .event-tag.sport{color:#55aa77;border-color:#55aa77;}
     /* 占い */
     .fortune-overlay{position:fixed;inset:0;background:#00000099;z-index:400;display:flex;align-items:flex-end}
     .fortune-overlay.hidden{display:none}
@@ -537,7 +540,26 @@ async function fetchAll(force=false){
     clearInterval(loadingMsgTimer);
     document.getElementById('fetchBtn').disabled=false;
     lastResults=d.results||[];
-    renderShifts(d.results||[]);
+
+    // 横浜アリーナのイベント情報を取得
+    const evMap={};
+    try{
+      const months=new Set();
+      (d.results||[]).forEach(m=>(m.shifts||[]).forEach(s=>{
+        const dt=new Date(s.date+'T00:00:00');
+        months.add(`${dt.getFullYear()}-${dt.getMonth()+1}`);
+      }));
+      for(const ym of months){
+        const [y,mo]=ym.split('-');
+        const evRes=await fetch(`/api/events?year=${y}&month=${mo}`);
+        if(evRes.ok){
+          const evData=await evRes.json();
+          (evData.events||[]).forEach(e=>{ evMap[e.date]=e; });
+        }
+      }
+    }catch(e){}
+
+    renderShifts(d.results||[], evMap);
     lastShiftData=JSON.stringify((d.results||[]).map(r=>({name:r.name,shifts:r.shifts,pendingShifts:r.pendingShifts})));
 
     const ok=(d.results||[]).filter(r=>!r.error).length;
@@ -595,7 +617,7 @@ function renderMembers(){
     </div>`).join('');
 }
 
-function renderShifts(results){
+function renderShifts(results, evMap={}){
   const byDate={};
   for(const m of results){
     if(m.shifts){
@@ -629,7 +651,9 @@ function renderShifts(results){
       }
       return `<div class="shift-pill ${bg}"><span class="pill-name ${c}">${esc(s.name)}</span><span class="pill-time">${esc(s.start)}–${esc(s.end)}</span></div>`;
     }).join('');
-    html+=`<div class="date-block ${highlight}"><div class="date-row"><span class="date-tag ${dc}">${mo}/${d.getDate()}（${DAY[dow]}）</span><div class="shift-pills">${pills}</div></div></div>`;
+    const ev=evMap[date];
+    const evTag=ev?`<span class="event-tag${ev.type==='スポーツ'||ev.type==='バスケットボール'||ev.type==='バレーボール'?' sport':''}">${esc(ev.name.slice(0,15))}</span>`:'';
+    html+=`<div class="date-block ${highlight}"><div class="date-row"><span class="date-tag ${dc}">${mo}/${d.getDate()}（${DAY[dow]}）${evTag}</span><div class="shift-pills">${pills}</div></div></div>`;
   }
   document.getElementById('shiftContent').innerHTML=html;
 }
@@ -939,27 +963,15 @@ const LUCKY_ITEMS = [
   'トーキングロックフェス','2ndアルバム','3rdアルバム',
   '実行委員','生徒会書記','シャツ','柄シャツ',
   'ズッキーニ','ズッキーナ','ズキモン','フジモン',
-  'ヒール','こどもの国駅','宝物','気前','斧','思いやる心','戸越銀座商店街','簡易トイレ','エンタの神様',
-  '通天閣','いつもの','パントマイムライオン3のLINEスタンプ',
-  '表札','定型分'
+  'ヒール','こどもの国駅'
 ];
 
 function openFortune(){
   const today = new Date();
-  let seed = today.getFullYear()*10000 + (today.getMonth()+1)*100 + today.getDate();
-
-  // 【追加】ブラウザごとに固有のランダムIDを生成してシードに加算
-  let userUniqueKey = localStorage.getItem('fortune_user_key');
-  if (!userUniqueKey) {
-    userUniqueKey = Math.floor(Math.random() * 1000000).toString();
-    localStorage.setItem('fortune_user_key', userUniqueKey);
-  }
-  seed += parseInt(userUniqueKey, 10);
-
-  // シード付き乱数
+  const seed = today.getFullYear()*10000 + (today.getMonth()+1)*100 + today.getDate();
+  
+  // シード付き乱数（同じ日は同じ結果）
   function seededRand(s){ let x=Math.sin(s)*10000; return x-Math.floor(x); }
-
-  // 〜〜（以降の処理はそのまま）〜〜
   
   const isTriple = today.getDate()%3===0;
   let raw = seededRand(seed)*10; // 0〜10
