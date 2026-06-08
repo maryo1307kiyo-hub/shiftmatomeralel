@@ -173,7 +173,7 @@
 <body>
 
 <div class="header">
-  <span class="logo">SHIFT.EXE</span>
+  <span class="logo">Shift-matomeralel</span>
   <div class="header-actions">
     <button class="btn-px btn-ghost btn-sm" id="fetchBtn" style="display:none" onclick="fetchAll(true)">更新</button>
     <button class="btn-px btn-red btn-sm" id="leaveBtn" style="display:none" onclick="leaveGroup()">HOME</button>
@@ -372,6 +372,22 @@
         <input type="number" id="regWage" placeholder="1200">
         <div style="font-size:11px;color:var(--muted);">交通費（往復・円）</div>
         <input type="number" id="regCommute" placeholder="400">
+        <div style="font-size:11px;color:var(--muted);">星座</div>
+        <select id="regSign" style="background:#080814;border:2px solid var(--muted);color:var(--text);font-family:inherit;font-size:14px;padding:8px 10px;width:100%;outline:none;">
+          <option value="">選択してください</option>
+          <option value="♈牡羊座">♈牡羊座</option>
+          <option value="♉牡牛座">♉牡牛座</option>
+          <option value="♊双子座">♊双子座</option>
+          <option value="♋蟹座">♋蟹座</option>
+          <option value="♌獅子座">♌獅子座</option>
+          <option value="♍乙女座">♍乙女座</option>
+          <option value="♎天秤座">♎天秤座</option>
+          <option value="♏蠍座">♏蠍座</option>
+          <option value="♐射手座">♐射手座</option>
+          <option value="♑山羊座">♑山羊座</option>
+          <option value="♒水瓶座">♒水瓶座</option>
+          <option value="♓魚座">♓魚座</option>
+        </select>
         <div style="font-size:11px;color:var(--muted);">ニックネームカラー</div>
         <div class="color-grid" id="regColorGrid"></div>
         <button class="btn-px btn-primary" onclick="registerMypage()">登録する</button>
@@ -397,8 +413,22 @@
         <div class="px-label">設定</div>
         <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">時給（円）</div>
         <input type="number" id="myWage" placeholder="1200">
-        <div style="font-size:11px;color:var(--muted);margin-bottom:4px;margin-top:8px;">交通費（往復・円）</div>
-        <input type="number" id="myCommute" placeholder="400">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px;margin-top:8px;">星座</div>
+        <select id="mySign" style="background:#080814;border:2px solid var(--muted);color:var(--text);font-family:inherit;font-size:14px;padding:8px 10px;width:100%;outline:none;">
+          <option value="">選択してください</option>
+          <option value="♈牡羊座">♈牡羊座</option>
+          <option value="♉牡牛座">♉牡牛座</option>
+          <option value="♊双子座">♊双子座</option>
+          <option value="♋蟹座">♋蟹座</option>
+          <option value="♌獅子座">♌獅子座</option>
+          <option value="♍乙女座">♍乙女座</option>
+          <option value="♎天秤座">♎天秤座</option>
+          <option value="♏蠍座">♏蠍座</option>
+          <option value="♐射手座">♐射手座</option>
+          <option value="♑山羊座">♑山羊座</option>
+          <option value="♒水瓶座">♒水瓶座</option>
+          <option value="♓魚座">♓魚座</option>
+        </select>
         <div style="font-size:11px;color:var(--muted);margin-bottom:6px;margin-top:8px;">ニックネームカラー</div>
         <div class="color-grid" id="myColorGrid"></div>
         <button class="btn-px btn-primary" onclick="saveMySettings()" style="margin-top:8px;">保存</button>
@@ -617,6 +647,8 @@ function renderMembers(){
         <div class="member-name ${C[i%8]}" style="${myData&&myData.nickname===m.name?'color:'+myData.color:''}">  ${esc(m.name)}</div>
         <div class="member-url">${esc(m.url.replace(/([?&]s=)[^&]+/, '$1****'))}</div>
       </div>
+      <button class="btn-px btn-ghost btn-sm" onclick="exportMemberCal('${esc(m.name)}')" style="font-size:10px;padding:3px 8px;">📅</button>
+      <button class="btn-px btn-ghost btn-sm" onclick="editNickname('${esc(m.url)}','${esc(m.name)}')" style="font-size:10px;padding:3px 6px;">✏️</button>
       <button class="btn-px btn-ghost btn-sm" onclick="exportMemberCal('${esc(m.name)}')" style="font-size:10px;padding:3px 8px;">📅</button>
       <button class="btn-px btn-red" onclick="removeMember('${esc(m.url)}','${esc(m.name)}')">DEL</button>
     </div>`).join('');
@@ -1078,6 +1110,23 @@ function startTapGame(){
   document.getElementById('tapTimerDisplay').textContent='10.0 秒';
 }
 
+// ===== ニックネーム編集 =====
+async function editNickname(url, currentName){
+  const newName = prompt('新しいニックネームを入力してください', currentName);
+  if(!newName || newName===currentName) return;
+  try{
+    const r = await fetch(`/api/groups?groupId=${encodeURIComponent(groupId)}&action=rename`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({url, oldName:currentName, newName})
+    });
+    const d = await r.json();
+    if(d.error){ showToast(d.error); return; }
+    members = d.members;
+    renderMembers();
+    showToast(`${currentName} → ${newName} に変更しました`);
+  }catch(e){ showToast('変更に失敗しました'); }
+}
+
 // ===== ユーティリティ =====
 function copyGroupId(){
   const url=`${location.origin}${location.pathname}?g=${groupId}`;
@@ -1096,7 +1145,9 @@ function setStatus(t){ document.getElementById('statusText').textContent=t; }
 const MY_COLORS = [
   '#7799cc','#cc8855','#55aa77','#9966bb',
   '#aaa033','#cc5566','#5599aa','#99aa55',
-  '#cc9966','#6699bb'
+  '#cc9966','#6699bb','#bb5533','#33aacc',
+  '#99cc44','#cc44aa','#4466cc','#ccaa33',
+  '#44ccaa','#aa44cc','#cc6633','#66aacc'
 ];
 let myData = null;
 let mySelectedColor = MY_COLORS[0];
