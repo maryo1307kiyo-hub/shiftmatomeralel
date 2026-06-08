@@ -386,19 +386,7 @@
     <div id="mypageLogin">
       <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">マイIDでログインすると給料計算などができます</div>
       <div style="display:flex;flex-direction:column;gap:8px;">
-        <div style="font-size:11px;color:var(--muted);">マイID（英数字6文字以上）</div>
-        <input type="text" id="myUserId" placeholder="例: matomereltarou1234" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
-        <button class="btn-px btn-primary" onclick="loginMypage()">ログイン / 新規登録</button>
-      </div>
-    </div>
-
-    <!-- 新規登録画面 -->
-    <div id="mypageRegister" style="display:none">
-      <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">初回登録：グループIDとニックネームを紐づけます</div>
-      <div style="display:flex;flex-direction:column;gap:8px;">
-        <div style="font-size:11px;color:var(--muted);">グループID</div>
-        <input type="text" id="regGroupId" placeholder="グループID" autocomplete="off" autocorrect="off" autocapitalize="off">
-        <div style="font-size:11px;color:var(--muted);">ニックネーム（グループに登録済みのもの）</div>
+            <div style="font-size:11px;color:var(--muted);">ニックネーム（グループに登録済みのもの）</div>
         <input type="text" id="regNickname" placeholder="例: しふた" autocomplete="off">
         <div style="font-size:11px;color:var(--muted);">時給（円）</div>
         <input type="number" id="regWage" placeholder="1200">
@@ -700,11 +688,9 @@ function renderShifts(results, evMap={}){
 
 
 // ===== ゲーム =====
-let gameState = null;
-let gameLoop = null;
-let gameGroupId = null;
-let gameNickname = null;
-let gameUserId = null;
+let gameState=null, gameLoop=null, gameGroupId=null, gameNickname=null, gameUserId=null;
+let tapCount=0, tapTimer=null, tapRunning=false, tapTimeLeft=10.0;
+
 
 function openGameSetup(id, gameType='lion'){
   gameGroupId = id;
@@ -715,12 +701,6 @@ function openGameSetup(id, gameType='lion'){
   document.getElementById('gameScreen').style.display='none';
   document.getElementById('tapScreen').style.display='none';
   // 保存済みの情報を復元
-  const saved = localStorage.getItem('gameProfile');
-  if(saved){
-    const p = JSON.parse(saved);
-    document.getElementById('gameNickname').value = p.nickname||'';
-    document.getElementById('gameUserId').value = p.userId||'';
-  }
   loadRanking(id);
 }
 
@@ -735,8 +715,8 @@ function startGame(){
   const gid = document.getElementById('gameGroupIdInput').value.trim();
   if(!nick){ showToast('ニックネームを入力してください'); return; }
   gameNickname = nick;
+  gameUserId = 'p_'+Math.random().toString(36).slice(2,10);
   gameGroupId = gid || gameGroupId;
-  localStorage.setItem('gameProfile', JSON.stringify({nickname:nick, userId:uid}));
   document.getElementById('gameSetup').style.display='none';
   if(window._startGameType === 'tap'){
     document.getElementById('gameScreen').style.display='none';
@@ -1023,10 +1003,7 @@ function closeFortune(e){
 }
 
 // ===== 連打ゲーム =====
-let tapCount = 0;
-let tapTimer = null;
-let tapRunning = false;
-let tapTimeLeft = 10.0;
+
 
 function switchToTapGame(){
   document.getElementById('gameScreen').style.display='none';
@@ -1127,6 +1104,8 @@ function showToast(msg){ const t=document.getElementById('toast'); t.textContent
 function setStatus(t){ document.getElementById('statusText').textContent=t; }
 
 // ===== ゲーム =====
+let gameState=null, gameLoop=null, gameGroupId=null, gameNickname=null, gameUserId=null;
+let tapCount=0, tapTimer=null, tapRunning=false, tapTimeLeft=10.0;
 
 
 function openGameSetup(id, gameType='lion'){
@@ -1138,12 +1117,6 @@ function openGameSetup(id, gameType='lion'){
   document.getElementById('gameScreen').style.display='none';
   document.getElementById('tapScreen').style.display='none';
   // 保存済みの情報を復元
-  const saved = localStorage.getItem('gameProfile');
-  if(saved){
-    const p = JSON.parse(saved);
-    document.getElementById('gameNickname').value = p.nickname||'';
-    document.getElementById('gameUserId').value = p.userId||'';
-  }
   loadRanking(id);
 }
 
@@ -1158,8 +1131,8 @@ function startGame(){
   const gid = document.getElementById('gameGroupIdInput').value.trim();
   if(!nick){ showToast('ニックネームを入力してください'); return; }
   gameNickname = nick;
+  gameUserId = 'p_'+Math.random().toString(36).slice(2,10);
   gameGroupId = gid || gameGroupId;
-  localStorage.setItem('gameProfile', JSON.stringify({nickname:nick, userId:uid}));
   document.getElementById('gameSetup').style.display='none';
   if(window._startGameType === 'tap'){
     document.getElementById('gameScreen').style.display='none';
@@ -1547,14 +1520,6 @@ function showToast(msg){ const t=document.getElementById('toast'); t.textContent
 function setStatus(t){ document.getElementById('statusText').textContent=t; }
 
 // ===== マイページ =====
-const MY_COLORS = [
-  '#7799cc','#cc8855','#55aa77','#9966bb',
-  '#aaa033','#cc5566','#5599aa','#99aa55',
-  '#cc9966','#6699bb','#bb5533','#33aacc',
-  '#99cc44','#cc44aa','#4466cc','#ccaa33',
-  '#44ccaa','#aa44cc','#cc6633','#66aacc'
-];
-let mySelectedColor = MY_COLORS[0];
 
 
 
