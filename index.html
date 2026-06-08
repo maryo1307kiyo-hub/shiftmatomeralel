@@ -374,12 +374,7 @@
   <!-- ランキング画面（メンバー設定内に表示） -->
 </div>
 
-<!-- マイページモーダル -->
-<div class="modal-overlay hidden" id="mypageModal" onclick="closeMypageModal(event)">
-  <div class="modal-sheet" id="mypageSheet">
-    <div class="modal-header">
-      <span class="modal-title" id="mypageTitle">MY PAGE</span>
-      <button class="btn-px btn-ghost btn-sm" onclick="closeMypage()">✕</button>
+
     </div>
 
     <!-- 未ログイン画面 -->
@@ -399,13 +394,7 @@
       </div>
     </div>
 
-    <!-- マイページ本体 -->
-    <div id="mypageMain" style="display:none">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
-        <span id="myNicknameDisplay" style="font-size:16px;font-weight:bold;"></span>
-        <span style="font-size:11px;color:var(--muted);" id="myGroupDisplay"></span>
-      </div>
-
+  
       <!-- ステータス -->
       <div class="px-card" style="margin-bottom:10px;">
         <div class="px-label">TODAY</div>
@@ -1518,31 +1507,6 @@ function copyGroupId(){
 function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2500); }
 function setStatus(t){ document.getElementById('statusText').textContent=t; }
-
-// ===== マイページ =====
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 // ===== タブ =====
