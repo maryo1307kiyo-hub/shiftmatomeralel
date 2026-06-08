@@ -4,6 +4,8 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
+  const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
+  const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
   const UPSTASH_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
   const UPSTASH_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 
@@ -53,14 +55,6 @@ export default async function handler(req, res) {
 
     if (action === 'remove') {
       members = members.filter(m => m.url !== body.url);
-      await redisSet(key, members);
-      return res.status(200).json({ members });
-    }
-
-    if (action === 'rename') {
-      const { url, oldName, newName } = body;
-      if (!url || !newName) return res.status(400).json({ error: 'url and newName required' });
-      members = members.map(m => m.url === url ? { ...m, name: newName } : m);
       await redisSet(key, members);
       return res.status(200).json({ members });
     }
