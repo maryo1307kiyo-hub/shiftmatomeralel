@@ -56,6 +56,14 @@ export default async function handler(req, res) {
       await redisSet(key, members);
       return res.status(200).json({ members });
     }
+
+    if (action === 'rename') {
+      const { url, oldName, newName } = body;
+      if (!url || !newName) return res.status(400).json({ error: 'url and newName required' });
+      members = members.map(m => m.url === url ? { ...m, name: newName } : m);
+      await redisSet(key, members);
+      return res.status(200).json({ members });
+    }
   }
 
   return res.status(405).json({ error: 'Method not allowed' });
