@@ -42,7 +42,7 @@ export default async function handler(req, res) {
 
     // 新規登録
     if (action === 'register') {
-      const { userId, nickname, groupId, hourlyWage, commute, color } = body;
+      const { userId, nickname, groupId, hourlyWage, commute, color, sign } = body;
       if (!userId || !nickname || !groupId) {
         return res.status(400).json({ error: 'userId, nickname, groupId required' });
       }
@@ -61,6 +61,7 @@ export default async function handler(req, res) {
         hourlyWage: parseInt(hourlyWage) || 0,
         commute: parseInt(commute) || 0,
         color: color || '#7799cc',
+        sign: sign || '',
         createdAt: new Date().toISOString()
       };
       await redisSet(`mypage:${userId}`, data);
