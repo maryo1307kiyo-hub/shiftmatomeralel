@@ -555,26 +555,6 @@ async function fetchAll(force=false){
   }
 }
 
-// ===== 今日のイベント =====
-function showTodayEvent(evMap){
-  const today=new Date().toLocaleDateString('sv-SE');
-  const ev=evMap[today];
-  let el=document.getElementById('todayEventBanner');
-  if(!el){
-    el=document.createElement('div');
-    el.id='todayEventBanner';
-    el.style.cssText='padding:8px 14px;font-size:12px;border-bottom:2px solid var(--border);display:flex;align-items:center;gap:8px;';
-    const shiftContent=document.getElementById('shiftContent');
-    shiftContent.parentNode.insertBefore(el, shiftContent);
-  }
-  if(ev){
-    el.style.display='flex';
-    el.innerHTML=`<span style="font-family:'Press Start 2P',monospace;font-size:7px;color:var(--accent4);">TODAY</span><span style="color:var(--text);">🎪 ${esc(ev.name)}</span><span style="font-size:11px;color:var(--muted);">${ev.type||''}</span>`;
-  } else {
-    el.style.display='none';
-  }
-}
-
 // ===== バックグラウンド更新 =====
 async function bgRefresh(){
   if(!groupId||!members.length) return;
@@ -590,7 +570,7 @@ async function bgRefresh(){
 
     // 差分あり→更新
     lastShiftData=newData;
-    renderShifts(d.results);
+    renderShifts(d.results||[]);
     const t=new Date(d.cachedAt);
     document.getElementById('lastUpdated').textContent=`${t.getMonth()+1}/${t.getDate()} ${t.getHours()}:${String(t.getMinutes()).padStart(2,'0')} 更新`;
     showToast('シフトが更新されました！');
