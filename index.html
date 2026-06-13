@@ -581,16 +581,22 @@ async function bgRefresh(){
 function renderMembers(){
   const list=document.getElementById('memberList');
   if(!members.length){ list.innerHTML='<div style="font-size:13px;color:var(--muted);">まだ登録されていません</div>'; return; }
-  const dotColors=['#7799cc','#cc8855','#55aa77','#9966bb','#aaa033','#cc5566','#5599aa','#99aa55'];
+  const dotColors=['#7799cc','#cc8855','#55aa77','#9966bb','#aaa033','#cc5566','#5599aa','#99aa55',
+    '#bb5533','#33aacc','#99cc44','#cc44aa','#4466cc','#ccaa33','#44ccaa','#aa44cc',
+    '#cc6633','#66aacc','#88bb44','#bb4488'];
+  // メンバーカラーはlocalStorageから取得
+  const memberColors = JSON.parse(localStorage.getItem('memberColors_'+groupId)||'{}');
   // マイページの色設定を反映
   list.innerHTML=members.map((m,i)=>`
     <div class="member-card">
-      <div class="member-dot" style="color:${myData&&myData.nickname===m.name?myData.color:dotColors[i%8]};border-color:${myData&&myData.nickname===m.name?myData.color:dotColors[i%8]}"></div>
+      <div class="member-dot" style="color:${memberColors[m.url]||dotColors[i%8]};border-color:${memberColors[m.url]||dotColors[i%8]}"></div>
       <div class="member-info">
-        <div class="member-name ${C[i%8]}" style="${myData&&myData.nickname===m.name?'color:'+myData.color:''}">  ${esc(m.name)}</div>
+        <div class="member-name" style="color:${memberColors[m.url]||dotColors[i%8]};font-weight:bold;font-size:14px;">  ${esc(m.name)}</div>
         <div class="member-url">${esc(m.url.replace(/([?&]s=)[^&]+/, '$1****'))}</div>
       </div>
       <button class="btn-px btn-ghost btn-sm" onclick="exportMemberCal('${esc(m.name)}')" style="font-size:10px;padding:3px 8px;">📅</button>
+      <button class="btn-px btn-ghost btn-sm" onclick="editNickname('${esc(m.url)}','${esc(m.name)}')" style="font-size:10px;padding:3px 6px;">✏️</button>
+      <button class="btn-px btn-ghost btn-sm" onclick="editColor('${esc(m.url)}','${esc(m.name)}')" style="font-size:10px;padding:3px 6px;">🎨</button>
       <button class="btn-px btn-red" onclick="removeMember('${esc(m.url)}','${esc(m.name)}')">DEL</button>
     </div>`).join('');
 }
@@ -1060,6 +1066,59 @@ function startTapGame(){
   tapCount=0; tapTimeLeft=10.0; tapRunning=false;
   document.getElementById('tapCountDisplay').textContent='0 回';
   document.getElementById('tapTimerDisplay').textContent='10.0 秒';
+}
+
+// ===== ニックネーム編集 =====
+async function editNickname(url, currentName){
+  const newName = prompt('新しいニックネームを入力してください', currentName);
+  if(!newName||newName===currentName) return;
+  try{
+    const r=await fetch(`/api/groups?groupId=${encodeURIComponent(groupId)}&action=rename`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({url,oldName:currentName,newName})
+    });
+    const d=await r.json();
+    if(d.error){ showToast(d.error); return; }
+    members=d.members;
+    renderMembers();
+    showToast(`${currentName} → ${newName} に変更しました`);
+  }catch(e){ showToast('変更に失敗しました'); }
+}
+
+// ===== カラー編集 =====
+const ALL_COLORS=['#7799cc','#cc8855','#55aa77','#9966bb','#aaa033','#cc5566','#5599aa','#99aa55',
+  '#bb5533','#33aacc','#99cc44','#cc44aa','#4466cc','#ccaa33','#44ccaa','#aa44cc',
+  '#cc6633','#66aacc','#88bb44','#bb4488'];
+
+function editColor(url, name){
+  // カラー選択ダイアログをトーストの代わりに画面上部に表示
+  const existing = document.getElementById('colorPickerOverlay');
+  if(existing) existing.remove();
+
+  const memberColors = JSON.parse(localStorage.getItem('memberColors_'+groupId)||'{}');
+  const current = memberColors[url] || '#7799cc';
+
+  const overlay = document.createElement('div');
+  overlay.id = 'colorPickerOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:#00000088;z-index:500;display:flex;align-items:flex-end';
+  overlay.innerHTML = `
+    <div style="background:var(--bg);border-top:2px solid var(--accent);width:100%;padding:16px;display:flex;flex-direction:column;gap:12px;">
+      <div style="font-family:'Press Start 2P',monospace;font-size:8px;color:var(--accent);">${name} のカラー</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;">
+        ${ALL_COLORS.map(c=>`<div onclick="setMemberColor('${url}','${c}')" style="width:32px;height:32px;background:${c};border:2px solid ${c===current?'#fff':'transparent'};cursor:pointer;"></div>`).join('')}
+      </div>
+      <button class="btn-px btn-ghost btn-sm" onclick="document.getElementById('colorPickerOverlay').remove()">閉じる</button>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+function setMemberColor(url, color){
+  const memberColors = JSON.parse(localStorage.getItem('memberColors_'+groupId)||'{}');
+  memberColors[url] = color;
+  localStorage.setItem('memberColors_'+groupId, JSON.stringify(memberColors));
+  document.getElementById('colorPickerOverlay').remove();
+  renderMembers();
+  showToast('カラーを変更しました');
 }
 
 // ===== ユーティリティ =====
