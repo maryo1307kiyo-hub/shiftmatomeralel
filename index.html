@@ -555,6 +555,26 @@ async function fetchAll(force=false){
   }
 }
 
+// ===== 今日のイベント =====
+function showTodayEvent(evMap){
+  const today=new Date().toLocaleDateString('sv-SE');
+  const ev=evMap[today];
+  let el=document.getElementById('todayEventBanner');
+  if(!el){
+    el=document.createElement('div');
+    el.id='todayEventBanner';
+    el.style.cssText='padding:8px 14px;font-size:12px;border-bottom:2px solid var(--border);display:flex;align-items:center;gap:8px;';
+    const shiftContent=document.getElementById('shiftContent');
+    shiftContent.parentNode.insertBefore(el, shiftContent);
+  }
+  if(ev){
+    el.style.display='flex';
+    el.innerHTML=`<span style="font-family:'Press Start 2P',monospace;font-size:7px;color:var(--accent4);">TODAY</span><span style="color:var(--text);">🎪 ${esc(ev.name)}</span><span style="font-size:11px;color:var(--muted);">${ev.type||''}</span>`;
+  } else {
+    el.style.display='none';
+  }
+}
+
 // ===== バックグラウンド更新 =====
 async function bgRefresh(){
   if(!groupId||!members.length) return;
@@ -583,7 +603,9 @@ function renderMembers(){
   if(!members.length){ list.innerHTML='<div style="font-size:13px;color:var(--muted);">まだ登録されていません</div>'; return; }
   const dotColors=['#7799cc','#cc8855','#55aa77','#9966bb','#aaa033','#cc5566','#5599aa','#99aa55',
     '#bb5533','#33aacc','#99cc44','#cc44aa','#4466cc','#ccaa33','#44ccaa','#aa44cc',
-    '#cc6633','#66aacc','#88bb44','#bb4488'];
+    '#cc6633','#66aacc','#88bb44','#bb4488','#dd7777','#77ddaa','#aa77dd','#ddbb55',
+    '#55bbdd','#dd55aa','#aadd55','#5577dd','#dd9944','#44dd99','#9944dd','#dd4499',
+    '#99dd44','#4499dd','#dd4444','#44dd44','#4444dd','#dddd44','#44dddd','#dd44dd'];
   // メンバーカラーはlocalStorageから取得
   const memberColors = JSON.parse(localStorage.getItem('memberColors_'+groupId)||'{}');
   // マイページの色設定を反映
@@ -629,11 +651,15 @@ function renderShifts(results){
     const isToday=date===todayStr;
     const highlight=isToday?'date-block--today':'';
     const pills=byDate[date].sort((a,b)=>a.start.localeCompare(b.start)).map(s=>{
-      const c=C[s.colorIdx%8], bg=BG[s.colorIdx%8];
+      const memberColor=urlToColor[s.name]||C[s.colorIdx%8];
+      const isHex=memberColor.startsWith('#');
+      const nameStyle=isHex?`color:${memberColor}`:'';
+      const pillStyle=isHex?`border-color:${memberColor}33;background:${memberColor}11`:'';
+      const nameClass=isHex?'':memberColor;
       if(s.pending){
-        return `<div class="shift-pill pill-pending"><span class="pill-label">申</span><span class="pill-name">${esc(s.name)}</span><span class="pill-time">${esc(s.start)}–${esc(s.end)}</span></div>`;
+        return `<div class="shift-pill pill-pending" style="${pillStyle}"><span class="pill-label">申</span><span class="pill-name" style="${nameStyle}">${esc(s.name)}</span><span class="pill-time">${esc(s.start)}–${esc(s.end)}</span></div>`;
       }
-      return `<div class="shift-pill ${bg}"><span class="pill-name ${c}">${esc(s.name)}</span><span class="pill-time">${esc(s.start)}–${esc(s.end)}</span></div>`;
+      return `<div class="shift-pill" style="${pillStyle}"><span class="pill-name" style="${nameStyle}">${esc(s.name)}</span><span class="pill-time">${esc(s.start)}–${esc(s.end)}</span></div>`;
     }).join('');
     html+=`<div class="date-block ${highlight}"><div class="date-row"><span class="date-tag ${dc}">${mo}/${d.getDate()}（${DAY[dow]}）</span><div class="shift-pills">${pills}</div></div></div>`;
   }
@@ -1086,9 +1112,13 @@ async function editNickname(url, currentName){
 }
 
 // ===== カラー編集 =====
-const ALL_COLORS=['#7799cc','#cc8855','#55aa77','#9966bb','#aaa033','#cc5566','#5599aa','#99aa55',
+const ALL_COLORS=[
+  '#7799cc','#cc8855','#55aa77','#9966bb','#aaa033','#cc5566','#5599aa','#99aa55',
   '#bb5533','#33aacc','#99cc44','#cc44aa','#4466cc','#ccaa33','#44ccaa','#aa44cc',
-  '#cc6633','#66aacc','#88bb44','#bb4488'];
+  '#cc6633','#66aacc','#88bb44','#bb4488','#dd7777','#77ddaa','#aa77dd','#ddbb55',
+  '#55bbdd','#dd55aa','#aadd55','#5577dd','#dd9944','#44dd99','#9944dd','#dd4499',
+  '#99dd44','#4499dd','#dd4444','#44dd44','#4444dd','#dddd44','#44dddd','#dd44dd'
+];
 
 function editColor(url, name){
   // カラー選択ダイアログをトーストの代わりに画面上部に表示
