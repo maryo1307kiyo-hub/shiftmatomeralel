@@ -661,7 +661,7 @@ function renderMembers(){
       <div class="member-dot" style="color:${memberColors[m.url]||dotColors[i%8]};border-color:${memberColors[m.url]||dotColors[i%8]}"></div>
       <div class="member-info">
         <div class="member-name" style="color:${memberColors[m.url]||dotColors[i%8]};font-weight:bold;font-size:14px;">  ${esc(m.name)}</div>
-        <div class="member-url">${esc(m.url.replace(/([?&]s=)[^&]+/, '$1****'))}</div>
+        <div class="member-url">${esc(maskCiftrUrl(m.url))}</div>
       </div>
       <button class="btn-px btn-ghost btn-sm" onclick="exportMemberCal('${esc(m.name)}')" style="font-size:10px;padding:3px 8px;">📅</button>
       <button class="btn-px btn-ghost btn-sm" onclick="editNickname('${esc(m.url)}','${esc(m.name)}')" style="font-size:10px;padding:3px 6px;">✏️</button>
@@ -1220,6 +1220,22 @@ function copyGroupId(){
     navigator.clipboard.writeText(text).then(()=>showToast('招待リンクをコピーしました！'));
   }
 }
+function maskCiftrUrl(url){
+  if(!url) return url;
+  // クエリパラメータ型: ?s=xxxxx → ?s=****
+  if(/[?&]s=/.test(url)){
+    return url.replace(/([?&]s=)[^&]+/, '$1****');
+  }
+  // パス型: /staff/login/2071/132626/967730 → /staff/login/****/****/****
+  const m = url.match(/^(https?:\/\/[^\/]+\/[^\/]+\/login)(\/.+)$/);
+  if(m){
+    const segments = m[2].split('/').filter(Boolean);
+    const masked = segments.map(()=>'****').join('/');
+    return m[1] + '/' + masked;
+  }
+  return url;
+}
+
 function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2500); }
 function setStatus(t){ document.getElementById('statusText').textContent=t; }
