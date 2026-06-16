@@ -94,6 +94,8 @@
     .date-row{display:flex;align-items:center;padding:7px 0 5px;border-bottom:var(--px) solid #ffffff08;gap:6px}
     .date-tag{font-family:'DotGothic16',monospace;font-size:13px;font-weight:bold;min-width:88px;color:var(--text)}
     .date-tag.sat{color:#5599bb}.date-tag.sun{color:#aa4455}
+    .event-tag{font-size:10px;color:var(--accent4);border:var(--px) solid var(--accent4);padding:1px 5px;margin-left:6px;font-family:'DotGothic16',monospace;}
+    .event-tag.sport{color:#55aa77;border-color:#55aa77;}
     .shift-pills{display:flex;flex-wrap:wrap;gap:4px;flex:1}
     .shift-pill{display:flex;align-items:center;gap:4px;padding:2px 6px;border:var(--px) solid;font-size:11px}
 
@@ -437,6 +439,7 @@ async function enterGroup(id){
   document.getElementById('groupIdDisplay').textContent=id;
   setStatus('メンバーを読み込み中...');
   await loadMembers();
+  loadRanking(id);
   if(members.length>0){
     fetchAll();
     // 初回表示後にバックグラウンドで差分チェック
@@ -504,6 +507,67 @@ async function removeMember(url,name){
 }
 
 // ===== シフト取得 =====
+async function loadEvents(results){
+  try{
+    const months=new Set();
+    (results||[]).forEach(m=>(m.shifts||[]).forEach(s=>{
+      const dt=new Date(s.date+'T00:00:00');
+      months.add(`${dt.getFullYear()}-${dt.getMonth()+1}`);
+    }));
+    const evMap={};
+    for(const ym of months){
+      const [y,mo]=ym.split('-');
+      try{
+        const evRes=await fetch(`/api/events?year=${y}&month=${mo}`);
+        if(evRes.ok){
+          const evData=await evRes.json();
+          (evData.events||[]).forEach(e=>{ evMap[e.date]=e; });
+        }
+      }catch(e){}
+    }
+    applyEventTags(evMap);
+    showTodayEvent(evMap);
+  }catch(e){
+    // イベント取得が全体的に失敗してもシフト表示には何も影響しない
+  }
+}
+
+function applyEventTags(evMap){
+  document.querySelectorAll('.date-tag[data-date]').forEach(tagEl=>{
+    const date=tagEl.dataset.date;
+    const ev=evMap[date];
+    if(ev){
+      const sportTypes=['スポーツ','バスケットボール','バレーボール'];
+      const cls=sportTypes.includes(ev.type)?' sport':'';
+      const existing=tagEl.querySelector('.event-tag');
+      if(existing) existing.remove();
+      tagEl.insertAdjacentHTML('beforeend', `<span class="event-tag${cls}">${esc(ev.name.slice(0,15))}</span>`);
+    }
+  });
+}
+
+function showTodayEvent(evMap){
+  const today=new Date().toLocaleDateString('sv-SE');
+  const ev=evMap[today];
+  let el=document.getElementById('todayEventBanner');
+  if(!el){
+    el=document.createElement('div');
+    el.id='todayEventBanner';
+    el.style.cssText='padding:8px 14px;font-size:12px;border-bottom:2px solid var(--border);display:flex;align-items:center;gap:8px;';
+    const shiftContent=document.getElementById('shiftContent');
+    if(shiftContent && shiftContent.parentNode){
+      shiftContent.parentNode.insertBefore(el, shiftContent);
+    }
+  }
+  if(ev){
+    el.style.display='flex';
+    el.innerHTML=`<span style="font-family:'Press Start 2P',monospace;font-size:7px;color:var(--accent4);">TODAY</span><span style="color:var(--text);">🎪 ${esc(ev.name)}</span><span style="font-size:11px;color:var(--muted);">${esc(ev.type||'')}</span>`;
+  } else {
+    el.style.display='none';
+  }
+}
+
+// ===== シフト取得 =====
 async function fetchAll(force=false){
   if(!members.length){ showToast('先にメンバーを設定してください'); return; }
   document.getElementById('fetchBtn').disabled=true;
@@ -540,6 +604,9 @@ async function fetchAll(force=false){
     renderShifts(d.results||[]);
     lastShiftData=JSON.stringify((d.results||[]).map(r=>({name:r.name,shifts:r.shifts,pendingShifts:r.pendingShifts})));
 
+    // イベント情報は完全に分離して非同期取得（失敗してもシフト表示に影響しない）
+    loadEvents(d.results||[]);
+
     const ok=(d.results||[]).filter(r=>!r.error).length;
     const total=(d.results||[]).length;
     const cacheLabel=d.fromCache?' (キャッシュ)':'';
@@ -570,7 +637,7 @@ async function bgRefresh(){
 
     // 差分あり→更新
     lastShiftData=newData;
-    renderShifts(d.results);
+    renderShifts(d.results||[]);
     const t=new Date(d.cachedAt);
     document.getElementById('lastUpdated').textContent=`${t.getMonth()+1}/${t.getDate()} ${t.getHours()}:${String(t.getMinutes()).padStart(2,'0')} 更新`;
     showToast('シフトが更新されました！');
@@ -583,7 +650,9 @@ function renderMembers(){
   if(!members.length){ list.innerHTML='<div style="font-size:13px;color:var(--muted);">まだ登録されていません</div>'; return; }
   const dotColors=['#7799cc','#cc8855','#55aa77','#9966bb','#aaa033','#cc5566','#5599aa','#99aa55',
     '#bb5533','#33aacc','#99cc44','#cc44aa','#4466cc','#ccaa33','#44ccaa','#aa44cc',
-    '#cc6633','#66aacc','#88bb44','#bb4488'];
+    '#cc6633','#66aacc','#88bb44','#bb4488','#dd7777','#77ddaa','#aa77dd','#ddbb55',
+    '#55bbdd','#dd55aa','#aadd55','#5577dd','#dd9944','#44dd99','#9944dd','#dd4499',
+    '#99dd44','#4499dd','#dd4444','#44dd44','#4444dd','#dddd44','#44dddd','#dd44dd'];
   // メンバーカラーはlocalStorageから取得
   const memberColors = JSON.parse(localStorage.getItem('memberColors_'+groupId)||'{}');
   // マイページの色設定を反映
@@ -629,13 +698,17 @@ function renderShifts(results){
     const isToday=date===todayStr;
     const highlight=isToday?'date-block--today':'';
     const pills=byDate[date].sort((a,b)=>a.start.localeCompare(b.start)).map(s=>{
-      const c=C[s.colorIdx%8], bg=BG[s.colorIdx%8];
+      const memberColor=urlToColor[s.name]||C[s.colorIdx%8];
+      const isHex=memberColor.startsWith('#');
+      const nameStyle=isHex?`color:${memberColor}`:'';
+      const pillStyle=isHex?`border-color:${memberColor}33;background:${memberColor}11`:'';
+      const nameClass=isHex?'':memberColor;
       if(s.pending){
-        return `<div class="shift-pill pill-pending"><span class="pill-label">申</span><span class="pill-name">${esc(s.name)}</span><span class="pill-time">${esc(s.start)}–${esc(s.end)}</span></div>`;
+        return `<div class="shift-pill pill-pending" style="${pillStyle}"><span class="pill-label">申</span><span class="pill-name" style="${nameStyle}">${esc(s.name)}</span><span class="pill-time">${esc(s.start)}–${esc(s.end)}</span></div>`;
       }
-      return `<div class="shift-pill ${bg}"><span class="pill-name ${c}">${esc(s.name)}</span><span class="pill-time">${esc(s.start)}–${esc(s.end)}</span></div>`;
+      return `<div class="shift-pill" style="${pillStyle}"><span class="pill-name" style="${nameStyle}">${esc(s.name)}</span><span class="pill-time">${esc(s.start)}–${esc(s.end)}</span></div>`;
     }).join('');
-    html+=`<div class="date-block ${highlight}"><div class="date-row"><span class="date-tag ${dc}">${mo}/${d.getDate()}（${DAY[dow]}）</span><div class="shift-pills">${pills}</div></div></div>`;
+    html+=`<div class="date-block ${highlight}"><div class="date-row"><span class="date-tag ${dc}" data-date="${date}">${mo}/${d.getDate()}（${DAY[dow]}）</span><div class="shift-pills">${pills}</div></div></div>`;
   }
   document.getElementById('shiftContent').innerHTML=html;
 }
@@ -1086,9 +1159,13 @@ async function editNickname(url, currentName){
 }
 
 // ===== カラー編集 =====
-const ALL_COLORS=['#7799cc','#cc8855','#55aa77','#9966bb','#aaa033','#cc5566','#5599aa','#99aa55',
+const ALL_COLORS=[
+  '#7799cc','#cc8855','#55aa77','#9966bb','#aaa033','#cc5566','#5599aa','#99aa55',
   '#bb5533','#33aacc','#99cc44','#cc44aa','#4466cc','#ccaa33','#44ccaa','#aa44cc',
-  '#cc6633','#66aacc','#88bb44','#bb4488'];
+  '#cc6633','#66aacc','#88bb44','#bb4488','#dd7777','#77ddaa','#aa77dd','#ddbb55',
+  '#55bbdd','#dd55aa','#aadd55','#5577dd','#dd9944','#44dd99','#9944dd','#dd4499',
+  '#99dd44','#4499dd','#dd4444','#44dd44','#4444dd','#dddd44','#44dddd','#dd44dd'
+];
 
 function editColor(url, name){
   // カラー選択ダイアログをトーストの代わりに画面上部に表示
