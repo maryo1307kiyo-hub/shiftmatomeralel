@@ -1,5 +1,17 @@
 // api/game.js - ゲームスコア管理API
 
+function jstNow(){
+  return new Date(Date.now() + 9*60*60*1000);
+}
+function jstDateStr(){
+  const d = jstNow();
+  return d.toISOString().slice(0,10);
+}
+function jstTimeStr(){
+  const d = jstNow();
+  return d.toISOString().slice(11,16);
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -33,7 +45,7 @@ export default async function handler(req, res) {
     const gameType = req.query.gameType || 'lion';
     const scores = await redisGet(`game:ranking:${groupId}:${gameType}`) || [];
     // 今日の日付
-    const today = new Date().toLocaleDateString('sv-SE');
+    const today = jstDateStr();
     // 日次ランキング（今日のベスト）
     const dailyMap = {};
     for (const s of scores) {
@@ -64,9 +76,8 @@ export default async function handler(req, res) {
     const type = gameType || 'lion';
     const key = `game:ranking:${gid}:${type}`;
     const scores = await redisGet(key) || [];
-    const today = new Date().toLocaleDateString('sv-SE');
-    const now = new Date();
-    const timeStr = now.getHours().toString().padStart(2,'0')+':'+now.getMinutes().toString().padStart(2,'0');
+    const today = jstDateStr();
+    const timeStr = jstTimeStr();
     scores.push({ userId, nickname, score: Math.floor(score), date: today, time: timeStr, ts: Date.now() });
     // 最大1000件保持
     if (scores.length > 1000) scores.splice(0, scores.length - 1000);
@@ -76,9 +87,7 @@ export default async function handler(req, res) {
     const pbKey = `game:pb:${userId}`;
     const pb = await redisGet(pbKey);
     if (!pb || score > pb.score) {
-      const now2 = new Date();
-      const timeStr2 = now2.getHours().toString().padStart(2,'0')+':'+now2.getMinutes().toString().padStart(2,'0');
-      await redisSet(pbKey, { score: Math.floor(score), date: today, time: timeStr2 });
+      await redisSet(pbKey, { score: Math.floor(score), date: today, time: jstTimeStr() });
     }
 
     return res.status(200).json({ ok: true });
