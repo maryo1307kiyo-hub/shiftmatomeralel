@@ -117,6 +117,10 @@
     .pill-pending{border-style:dashed!important;background:transparent!important;border-color:#bb774488!important}
     .pill-pending .pill-name{color:#cc8855!important}
     .pill-pending .pill-time{color:#bb774466}
+    .pill-rejected{border-style:dotted!important;background:transparent!important;border-color:#88889966!important;opacity:0.7;}
+    .pill-rejected .pill-name{color:#888899!important;text-decoration:line-through;}
+    .pill-label-rejected{font-size:11px;border:none!important;padding:0!important;}
+    .pill-time-rejected{color:#888899!important;font-size:10px;}
     .pill-label{font-size:7px;border:var(--px) solid #cc8855;padding:0 2px;color:#cc8855;font-family:'Press Start 2P',monospace}
 
     /* 占い */
@@ -602,7 +606,7 @@ async function fetchAll(force=false){
     document.getElementById('fetchBtn').disabled=false;
     lastResults=d.results||[];
     renderShifts(d.results||[]);
-    lastShiftData=JSON.stringify((d.results||[]).map(r=>({name:r.name,shifts:r.shifts,pendingShifts:r.pendingShifts})));
+    lastShiftData=JSON.stringify((d.results||[]).map(r=>({name:r.name,shifts:r.shifts,pendingShifts:r.pendingShifts,rejectedShifts:r.rejectedShifts})));
 
     // イベント情報は完全に分離して非同期取得（失敗してもシフト表示に影響しない）
     loadEvents(d.results||[]);
@@ -632,7 +636,7 @@ async function bgRefresh(){
     if(!d.results||d.fromCache) return;
 
     // 差分チェック
-    const newData=JSON.stringify(d.results.map(r=>({name:r.name,shifts:r.shifts,pendingShifts:r.pendingShifts})));
+    const newData=JSON.stringify(d.results.map(r=>({name:r.name,shifts:r.shifts,pendingShifts:r.pendingShifts,rejectedShifts:r.rejectedShifts})));
     if(newData===lastShiftData) return;
 
     // 差分あり→更新
@@ -697,6 +701,12 @@ function renderShifts(results){
         byDate[s.date].push({...s,name:m.name,colorIdx:m.colorIdx,pending:true});
       }
     }
+    if(m.rejectedShifts){
+      for(const s of m.rejectedShifts){
+        if(!byDate[s.date]) byDate[s.date]=[];
+        byDate[s.date].push({...s,name:m.name,colorIdx:m.colorIdx,rejected:true});
+      }
+    }
   }
   const dates=Object.keys(byDate).sort();
   if(!dates.length){ document.getElementById('shiftContent').innerHTML='<div class="empty-state">シフトが見つかりませんでした</div>'; return; }
@@ -709,12 +719,15 @@ function renderShifts(results){
     const todayStr=new Date().toLocaleDateString('sv-SE');
     const isToday=date===todayStr;
     const highlight=isToday?'date-block--today':'';
-    const pills=byDate[date].sort((a,b)=>a.start.localeCompare(b.start)).map(s=>{
+    const pills=byDate[date].sort((a,b)=>(a.start||'').localeCompare(b.start||'')).map(s=>{
       const memberColor=urlToColor[s.name]||C[s.colorIdx%8];
       const isHex=memberColor.startsWith('#');
       const nameStyle=isHex?`color:${memberColor}`:'';
       const pillStyle=isHex?`border-color:${memberColor}33;background:${memberColor}11`:'';
       const nameClass=isHex?'':memberColor;
+      if(s.rejected){
+        return `<div class="shift-pill pill-rejected"><span class="pill-label pill-label-rejected">👻</span><span class="pill-name" style="${nameStyle}">${esc(s.name)}</span><span class="pill-time pill-time-rejected">シフト申請失敗</span></div>`;
+      }
       if(s.pending){
         return `<div class="shift-pill pill-pending" style="${pillStyle}"><span class="pill-label">申</span><span class="pill-name" style="${nameStyle}">${esc(s.name)}</span><span class="pill-time">${esc(s.start)}–${esc(s.end)}</span></div>`;
       }
