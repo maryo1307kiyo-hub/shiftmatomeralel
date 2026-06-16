@@ -19,7 +19,7 @@ export default async function handler(req, res) {
     const confirmedRes = await fetch(url, { headers });
     if (!confirmedRes.ok) return res.status(confirmedRes.status).json({ error: `HTTP ${confirmedRes.status}` });
     const confirmedHtml = await confirmedRes.text();
-    const { shifts: confirmedShifts, year, month } = parseConfirmedHTML(confirmedHtml);
+    const { shifts: confirmedShifts, rejected: confirmedRejected, year, month } = parseConfirmedHTML(confirmedHtml);
 
     // 申請シフト取得（s=パラメータを使って bulk_edit URLを生成）
     const sParam = url.match(/[?&]s=([^&]+)/)?.[1];
@@ -40,7 +40,17 @@ export default async function handler(req, res) {
 
     // 申請シフトから確定済みを除外し、不採用を分離
     const pendingOnly = pendingShifts.filter(s => !confirmedDates.has(s.date) && !s.rejected);
-    const rejectedOnly = pendingShifts.filter(s => s.rejected && !confirmedDates.has(s.date));
+    const pendingRejected = pendingShifts.filter(s => s.rejected && !confirmedDates.has(s.date));
+
+    // 確定ページの「---」検出 と 申請ページの不採用検出 を統合（重複日付は除去）
+    const rejectedDates = new Set();
+    const rejectedOnly = [];
+    for (const r of [...confirmedRejected, ...pendingRejected]) {
+      if (!confirmedDates.has(r.date) && !rejectedDates.has(r.date)) {
+        rejectedDates.add(r.date);
+        rejectedOnly.push(r);
+      }
+    }
 
     return res.status(200).json({
       shifts: confirmedShifts,
@@ -55,6 +65,7 @@ export default async function handler(req, res) {
 
 function parseConfirmedHTML(html) {
   const shifts = [];
+  const rejected = [];
   const text = html
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/?(div|p|li|tr|td|th)[^>]*>/gi, '\n')
@@ -77,6 +88,17 @@ function parseConfirmedHTML(html) {
       if (month === 1 && new Date().getMonth() === 11) year++;
       continue;
     }
+
+    // "7日(土) ---" パターン（申請していたシフトが取り消し・削除された）
+    const rejectedMatch = line.match(/^(\d{1,2})日[（(][月火水木金土日][）)][\s　]*-{2,}\s*$/);
+    if (rejectedMatch && month !== null) {
+      rejected.push({
+        date: `${year}-${String(month).padStart(2,'0')}-${String(parseInt(rejectedMatch[1])).padStart(2,'0')}`,
+        rejected: true
+      });
+      continue;
+    }
+
     const dayMatch = line.match(/^(\d{1,2})日[（(][月火水木金土日][）)][\s　]*([\d:]+[-–ー][\d:]+)?/);
     if (dayMatch && month !== null && dayMatch[2]) {
       const parts = dayMatch[2].trim().split(/[-–ー]/);
@@ -89,7 +111,7 @@ function parseConfirmedHTML(html) {
       }
     }
   }
-  return { shifts, year, month };
+  return { shifts, rejected, year, month };
 }
 
 function parsePendingHTML(html, baseYear, baseMonth) {
