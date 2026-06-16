@@ -671,6 +671,18 @@ function renderMembers(){
 }
 
 function renderShifts(results){
+  // メンバーカラー（localStorageの保存色、なければデフォルト40色から割当）
+  const dotColors=['#7799cc','#cc8855','#55aa77','#9966bb','#aaa033','#cc5566','#5599aa','#99aa55',
+    '#bb5533','#33aacc','#99cc44','#cc44aa','#4466cc','#ccaa33','#44ccaa','#aa44cc',
+    '#cc6633','#66aacc','#88bb44','#bb4488','#dd7777','#77ddaa','#aa77dd','#ddbb55',
+    '#55bbdd','#dd55aa','#aadd55','#5577dd','#dd9944','#44dd99','#9944dd','#dd4499',
+    '#99dd44','#4499dd','#dd4444','#44dd44','#4444dd','#dddd44','#44dddd','#dd44dd'];
+  const memberColors=JSON.parse(localStorage.getItem('memberColors_'+groupId)||'{}');
+  const urlToColor={};
+  if(members&&members.length){
+    members.forEach((m,i)=>{ urlToColor[m.name]=memberColors[m.url]||dotColors[i%dotColors.length]; });
+  }
+
   const byDate={};
   for(const m of results){
     if(m.shifts){
