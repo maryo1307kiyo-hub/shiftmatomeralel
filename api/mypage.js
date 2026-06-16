@@ -42,7 +42,7 @@ export default async function handler(req, res) {
 
     // 新規登録
     if (action === 'register') {
-      const { userId, nickname, groupId, hourlyWage, commute, color } = body;
+      const { userId, nickname, groupId, color } = body;
       if (!userId || !nickname || !groupId) {
         return res.status(400).json({ error: 'userId, nickname, groupId required' });
       }
@@ -58,8 +58,6 @@ export default async function handler(req, res) {
 
       const data = {
         userId, nickname, groupId,
-        hourlyWage: parseInt(hourlyWage) || 0,
-        commute: parseInt(commute) || 0,
         color: color || '#7799cc',
         createdAt: new Date().toISOString()
       };
@@ -69,14 +67,12 @@ export default async function handler(req, res) {
 
     // 設定更新
     if (action === 'update') {
-      const { userId, hourlyWage, commute, color } = body;
+      const { userId, color } = body;
       if (!userId) return res.status(400).json({ error: 'userId required' });
       const data = await redisGet(`mypage:${userId}`);
       if (!data) return res.status(404).json({ error: 'not found' });
       const updated = {
         ...data,
-        hourlyWage: parseInt(hourlyWage) ?? data.hourlyWage,
-        commute: parseInt(commute) ?? data.commute,
         color: color || data.color,
       };
       await redisSet(`mypage:${userId}`, updated);
