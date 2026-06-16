@@ -59,7 +59,7 @@ export default async function handler(req, res) {
       const d = await r.json();
       return { name: member.name, colorIdx: idx, ...d };
     } catch(e) {
-      return { name: member.name, colorIdx: idx, error: e.message, shifts: [], pendingShifts: [] };
+      return { name: member.name, colorIdx: idx, error: e.message, shifts: [], pendingShifts: [], rejectedShifts: [] };
     }
   }));
 
