@@ -366,10 +366,6 @@
         <input type="text" id="regGroupId" placeholder="グループID" autocomplete="off" autocorrect="off" autocapitalize="off">
         <div style="font-size:11px;color:var(--muted);">ニックネーム（グループに登録済みのもの）</div>
         <input type="text" id="regNickname" placeholder="例: しふた" autocomplete="off">
-        <div style="font-size:11px;color:var(--muted);">時給（円）</div>
-        <input type="number" id="regWage" placeholder="1200">
-        <div style="font-size:11px;color:var(--muted);">交通費（往復・円）</div>
-        <input type="number" id="regCommute" placeholder="400">
         <div style="font-size:11px;color:var(--muted);">ニックネームカラー</div>
         <div class="color-grid" id="regColorGrid"></div>
         <button class="btn-px btn-primary" onclick="registerMypage()">登録する</button>
@@ -387,17 +383,12 @@
       <div class="px-card" style="margin-bottom:10px;">
         <div class="px-label">TODAY</div>
         <div class="stat-row"><span class="stat-label">🦁 LION RUN 本日順位</span><span class="stat-value" id="myRankDisplay">-</span></div>
-        <div id="salaryBreakdown" style="display:flex;flex-direction:column;gap:4px;margin-top:8px;"></div>
       </div>
 
       <!-- 設定 -->
       <div class="px-card">
         <div class="px-label">設定</div>
-        <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">時給（円）</div>
-        <input type="number" id="myWage" placeholder="1200">
-        <div style="font-size:11px;color:var(--muted);margin-bottom:4px;margin-top:8px;">交通費（往復・円）</div>
-        <input type="number" id="myCommute" placeholder="400">
-        <div style="font-size:11px;color:var(--muted);margin-bottom:6px;margin-top:8px;">ニックネームカラー</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:6px;">ニックネームカラー</div>
         <div class="color-grid" id="myColorGrid"></div>
         <button class="btn-px btn-primary" onclick="saveMySettings()" style="margin-top:8px;">保存</button>
       </div>
@@ -1323,13 +1314,11 @@ async function registerMypage(){
   const userId = localStorage.getItem('myUserId');
   const groupId2 = document.getElementById('regGroupId').value.trim();
   const nickname = document.getElementById('regNickname').value.trim();
-  const hourlyWage = document.getElementById('regWage').value;
-  const commute = document.getElementById('regCommute').value;
   if(!groupId2||!nickname){ showToast('グループIDとニックネームは必須です'); return; }
   try{
     const r = await fetch('/api/mypage?action=register',{
       method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({userId,nickname,groupId:groupId2,hourlyWage,commute,color:mySelectedColor})
+      body:JSON.stringify({userId,nickname,groupId:groupId2,color:mySelectedColor})
     });
     const d = await r.json();
     if(d.error){ showToast(d.error); return; }
@@ -1341,12 +1330,10 @@ async function registerMypage(){
 
 async function saveMySettings(){
   const userId = localStorage.getItem('myUserId');
-  const hourlyWage = document.getElementById('myWage').value;
-  const commute = document.getElementById('myCommute').value;
   try{
     const r = await fetch('/api/mypage?action=update',{
       method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({userId,hourlyWage,commute,color:mySelectedColor})
+      body:JSON.stringify({userId,color:mySelectedColor})
     });
     const d = await r.json();
     if(d.error){ showToast(d.error); return; }
@@ -1367,52 +1354,10 @@ function showMypageMain(){
   nameEl.textContent = myData.nickname;
   nameEl.style.color = myData.color;
   document.getElementById('myGroupDisplay').textContent = 'グループ: '+myData.groupId;
-  document.getElementById('myWage').value = myData.hourlyWage||'';
-  document.getElementById('myCommute').value = myData.commute||'';
   mySelectedColor = myData.color;
   buildColorGrid('myColorGrid', myData.color, selectColor);
 
-  // 給料計算
-  calcSalary();
   applyMemberColor();
-}
-
-function calcSalary(){
-  if(!lastResults||!myData) return;
-  const memberData = lastResults.find(r=>r.name===myData.nickname&&r.colorIdx!==undefined);
-  if(!memberData) return;
-
-  const now = new Date();
-  const thisMonth = now.getMonth();
-  const thisYear = now.getFullYear();
-
-  let totalMinutes = 0;
-  let workDays = 0;
-  const shifts = [...(memberData.shifts||[]), ...(memberData.pendingShifts||[])];
-
-  for(const s of shifts){
-    const d = new Date(s.date+'T00:00:00');
-    if(d.getMonth()!==thisMonth||d.getFullYear()!==thisYear) continue;
-    const [sh,sm] = s.start.split(':').map(Number);
-    const [eh,em] = s.end.split(':').map(Number);
-    totalMinutes += (eh*60+em)-(sh*60+sm);
-    workDays++;
-  }
-
-  const hours = totalMinutes/60;
-  const wage = myData.hourlyWage||0;
-  const commute = myData.commute||0;
-  const basePay = Math.floor(hours*wage);
-  const commutePay = commute*workDays;
-  const total = basePay+commutePay;
-
-  document.getElementById('salaryBreakdown').innerHTML = `
-    <div class="stat-row"><span class="stat-label">今月の勤務時間</span><span class="stat-value">${hours.toFixed(1)}h</span></div>
-    <div class="stat-row"><span class="stat-label">勤務日数</span><span class="stat-value">${workDays}日</span></div>
-    <div class="stat-row" style="border-bottom:none"><span class="stat-label" style="font-weight:bold;color:var(--text);">今月の給与（予定）</span><span class="stat-value" style="color:var(--accent3);font-size:11px;">¥${total.toLocaleString()}</span></div>
-    <div style="font-size:10px;color:var(--muted);margin-top:4px;">基本給 ¥${basePay.toLocaleString()} + 交通費 ¥${commutePay.toLocaleString()}</div>
-  `;
-  // ゲームランキングの本日順位を取得
   loadMyRank();
 }
 
