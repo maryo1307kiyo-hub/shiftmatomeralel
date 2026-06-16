@@ -38,12 +38,14 @@ export default async function handler(req, res) {
     // 確定シフトの日付セット
     const confirmedDates = new Set(confirmedShifts.map(s => s.date));
 
-    // 申請シフトから確定済みを除外
-    const pendingOnly = pendingShifts.filter(s => !confirmedDates.has(s.date));
+    // 申請シフトから確定済みを除外し、不採用を分離
+    const pendingOnly = pendingShifts.filter(s => !confirmedDates.has(s.date) && !s.rejected);
+    const rejectedOnly = pendingShifts.filter(s => s.rejected && !confirmedDates.has(s.date));
 
     return res.status(200).json({
       shifts: confirmedShifts,
       pendingShifts: pendingOnly,
+      rejectedShifts: rejectedOnly,
       year, month
     });
   } catch (e) {
@@ -119,7 +121,7 @@ function parsePendingHTML(html, baseYear, baseMonth) {
       continue;
     }
 
-    // "25日(木) 1530 1900" パターン
+    // "25日(木) 1530 1900" パターン（採用済み申請）
     const dayMatch = line.match(/^(\d{1,2})日[（(][月火水木金土日][）)][\s　]*(\d{3,4})\s+(\d{3,4})/);
     if (dayMatch && month !== null) {
       const start = formatTime(dayMatch[2]);
@@ -127,6 +129,16 @@ function parsePendingHTML(html, baseYear, baseMonth) {
       shifts.push({
         date: `${year}-${String(month).padStart(2,'0')}-${String(parseInt(dayMatch[1])).padStart(2,'0')}`,
         start, end
+      });
+      continue;
+    }
+
+    // "25日(木) --:-- --:--" パターン（不採用・見送り）
+    const rejectedMatch = line.match(/^(\d{1,2})日[（(][月火水木金土日][）)][\s　]*-+:-+\s+-+:-+/);
+    if (rejectedMatch && month !== null) {
+      shifts.push({
+        date: `${year}-${String(month).padStart(2,'0')}-${String(parseInt(rejectedMatch[1])).padStart(2,'0')}`,
+        rejected: true
       });
     }
   }
