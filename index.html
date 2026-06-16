@@ -366,8 +366,6 @@
         <input type="text" id="regGroupId" placeholder="グループID" autocomplete="off" autocorrect="off" autocapitalize="off">
         <div style="font-size:11px;color:var(--muted);">ニックネーム（グループに登録済みのもの）</div>
         <input type="text" id="regNickname" placeholder="例: しふた" autocomplete="off">
-        <div style="font-size:11px;color:var(--muted);">ニックネームカラー</div>
-        <div class="color-grid" id="regColorGrid"></div>
         <button class="btn-px btn-primary" onclick="registerMypage()">登録する</button>
       </div>
     </div>
@@ -383,14 +381,6 @@
       <div class="px-card" style="margin-bottom:10px;">
         <div class="px-label">TODAY</div>
         <div class="stat-row"><span class="stat-label">🦁 LION RUN 本日順位</span><span class="stat-value" id="myRankDisplay">-</span></div>
-      </div>
-
-      <!-- 設定 -->
-      <div class="px-card">
-        <div class="px-label">設定</div>
-        <div style="font-size:11px;color:var(--muted);margin-bottom:6px;">ニックネームカラー</div>
-        <div class="color-grid" id="myColorGrid"></div>
-        <button class="btn-px btn-primary" onclick="saveMySettings()" style="margin-top:8px;">保存</button>
       </div>
 
       <button class="btn-px btn-red" onclick="logoutMypage()" style="width:100%;margin-top:8px;">ログアウト</button>
@@ -1245,26 +1235,7 @@ function showToast(msg){ const t=document.getElementById('toast'); t.textContent
 function setStatus(t){ document.getElementById('statusText').textContent=t; }
 
 // ===== マイページ =====
-const MY_COLORS = [
-  '#7799cc','#cc8855','#55aa77','#9966bb',
-  '#aaa033','#cc5566','#5599aa','#99aa55',
-  '#cc9966','#6699bb'
-];
 let myData = null;
-let mySelectedColor = MY_COLORS[0];
-
-function buildColorGrid(containerId, selectedColor, onSelect){
-  const grid = document.getElementById(containerId);
-  grid.innerHTML = MY_COLORS.map(c =>
-    `<div class="color-dot${c===selectedColor?' selected':''}" style="background:${c}" onclick="(${onSelect.toString()})('${c}','${containerId}')"></div>`
-  ).join('');
-}
-
-function selectColor(color, gridId){
-  mySelectedColor = color;
-  document.querySelectorAll(`#${gridId} .color-dot`).forEach(d => d.classList.remove('selected'));
-  event.target.classList.add('selected');
-}
 
 function openMypage(){
   document.getElementById('mypageModal').classList.remove('hidden');
@@ -1275,7 +1246,6 @@ function openMypage(){
     document.getElementById('myUserId').value = savedId;
     loginMypage();
   }
-  buildColorGrid('regColorGrid', MY_COLORS[0], selectColor);
 }
 
 function closeMypage(){
@@ -1300,7 +1270,6 @@ async function loginMypage(){
       document.getElementById('mypageLogin').style.display='none';
       document.getElementById('mypageRegister').style.display='block';
       if(groupId) document.getElementById('regGroupId').value = groupId;
-      buildColorGrid('regColorGrid', MY_COLORS[0], selectColor);
       return;
     }
     const d = await r.json();
@@ -1318,30 +1287,13 @@ async function registerMypage(){
   try{
     const r = await fetch('/api/mypage?action=register',{
       method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({userId,nickname,groupId:groupId2,color:mySelectedColor})
+      body:JSON.stringify({userId,nickname,groupId:groupId2})
     });
     const d = await r.json();
     if(d.error){ showToast(d.error); return; }
     myData = d;
     showMypageMain();
-    applyMemberColor();
   }catch(e){ showToast('登録に失敗しました'); }
-}
-
-async function saveMySettings(){
-  const userId = localStorage.getItem('myUserId');
-  try{
-    const r = await fetch('/api/mypage?action=update',{
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({userId,color:mySelectedColor})
-    });
-    const d = await r.json();
-    if(d.error){ showToast(d.error); return; }
-    myData = d;
-    showMypageMain();
-    applyMemberColor();
-    showToast('保存しました ✓');
-  }catch(e){ showToast('保存に失敗しました'); }
 }
 
 function showMypageMain(){
@@ -1352,19 +1304,9 @@ function showMypageMain(){
 
   const nameEl = document.getElementById('myNicknameDisplay');
   nameEl.textContent = myData.nickname;
-  nameEl.style.color = myData.color;
   document.getElementById('myGroupDisplay').textContent = 'グループ: '+myData.groupId;
-  mySelectedColor = myData.color;
-  buildColorGrid('myColorGrid', myData.color, selectColor);
 
-  applyMemberColor();
   loadMyRank();
-}
-
-function applyMemberColor(){
-  if(!myData) return;
-  // メンバーリストの色を更新
-  renderMembers();
 }
 
 function logoutMypage(){
