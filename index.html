@@ -165,8 +165,8 @@
     .flash-diff-btn.selected{border-color:var(--accent3);background:#44996611;color:var(--accent3);}
     .flash-sub-grid{display:flex;flex-direction:column;gap:8px;margin-top:4px;}
     .flash-play{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;gap:16px;}
-    .flash-item-display{font-family:'Press Start 2P',monospace;font-size:14px;color:var(--text);text-align:center;line-height:2;min-height:80px;display:flex;flex-direction:column;align-items:center;justify-content:center;}
-    .flash-item-name{font-size:14px;color:var(--accent3);}
+    .flash-item-display{color:var(--text);text-align:center;line-height:1.6;min-height:120px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 12px;}
+    .flash-item-name{font-family:'DotGothic16',monospace;font-size:clamp(18px,7vw,28px);font-weight:bold;color:var(--accent3);word-break:keep-all;}
     .flash-item-price{font-size:18px;color:#fff;margin-top:6px;}
     .flash-progress{font-size:11px;color:var(--muted);}
     .flash-answer-area{display:none;flex-direction:column;gap:12px;width:100%;max-width:320px;}
@@ -335,7 +335,7 @@
     <div class="flash-diff-btn" onclick="selectFlashDifficulty('extra')">🔴 エクストラ</div>
     <div class="flash-sub-grid hidden" id="flashExtraChoice">
       <div style="font-size:11px;color:var(--muted);">エクストラの種類を選択</div>
-      <div class="flash-diff-btn" onclick="startFlashGame('extra')">⚡ レギュラー（注文数が多いだけ）</div>
+      <div class="flash-diff-btn" onclick="startFlashGame('extra')">⚡ レギュラー</div>
       <div class="flash-diff-btn" onclick="showFlashSubGrid()">🎯 特別メニューを選ぶ</div>
     </div>
     <div class="flash-sub-grid hidden" id="flashSubGrid">
