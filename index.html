@@ -1455,6 +1455,11 @@ function startFlashGame(difficulty, subMode){
     normal: [5,10],
     extra: [8,15],
   };
+  const speeds = {
+    easy: 2000,
+    normal: 1800,
+    extra: 1500,
+  };
   const [min,max] = ranges[difficulty];
   const count = min + Math.floor(Math.random()*(max-min+1));
 
@@ -1470,7 +1475,8 @@ function startFlashGame(difficulty, subMode){
 
   flashState = {
     difficulty, subMode, items, total,
-    index: 0, answer: '', timer: null
+    index: 0, answer: '', timer: null,
+    speed: speeds[difficulty] || 1800
   };
 
   document.getElementById('flashSetup').style.display='none';
@@ -1490,11 +1496,21 @@ function showNextFlashItem(){
     return;
   }
   const item = st.items[st.index];
+  const nameEl = document.getElementById('flashItemName');
   document.getElementById('flashProgress').textContent = `${st.index+1} / ${st.items.length}`;
-  document.getElementById('flashItemName').textContent = item.name;
+  nameEl.textContent = item.name;
   document.getElementById('flashItemPrice').textContent = '';
+  nameEl.style.visibility = 'visible';
   st.index++;
-  st.timer = setTimeout(showNextFlashItem, 1000);
+
+  // 表示時間とブランク（フラッシュ消灯）時間に分割
+  const showTime = Math.max(st.speed * 0.7, 400);
+  const blankTime = Math.max(st.speed - showTime, 150);
+
+  st.timer = setTimeout(()=>{
+    nameEl.style.visibility = 'hidden';
+    st.timer = setTimeout(showNextFlashItem, blankTime);
+  }, showTime);
 }
 
 function showFlashAnswerInput(){
