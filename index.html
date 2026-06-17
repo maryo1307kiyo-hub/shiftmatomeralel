@@ -1492,7 +1492,30 @@ function startFlashGame(difficulty, subMode){
   document.getElementById('flashAnswerArea').style.display='none';
   document.getElementById('flashItemDisplay').style.display='flex';
 
-  showNextFlashItem();
+  startFlashCountdown();
+}
+
+function startFlashCountdown(){
+  const nameEl = document.getElementById('flashItemName');
+  const priceEl = document.getElementById('flashItemPrice');
+  document.getElementById('flashProgress').textContent = 'まもなく開始...';
+  priceEl.textContent = '';
+  nameEl.style.visibility = 'visible';
+
+  let count = 3;
+  nameEl.textContent = count;
+
+  const tick = ()=>{
+    count--;
+    if(count > 0){
+      nameEl.textContent = count;
+      flashState.timer = setTimeout(tick, 700);
+    } else {
+      nameEl.textContent = 'START!';
+      flashState.timer = setTimeout(showNextFlashItem, 500);
+    }
+  };
+  flashState.timer = setTimeout(tick, 700);
 }
 
 function showNextFlashItem(){
