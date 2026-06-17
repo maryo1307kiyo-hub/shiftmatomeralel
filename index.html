@@ -332,13 +332,26 @@
     <div style="font-family:'Press Start 2P',monospace;font-size:9px;color:var(--accent3);text-align:center;line-height:2">FLASH ACCOUNTING<br>会計を暗算しよう！</div>
     <div class="flash-diff-btn" onclick="selectFlashDifficulty('easy')">🟢 イージー（ノンアルのみ）</div>
     <div class="flash-diff-btn" onclick="selectFlashDifficulty('normal')">🟡 ノーマル（アルコール含む）</div>
-    <div class="flash-diff-btn" onclick="selectFlashDifficulty('extra')">🔴 エクストラ（全商品）</div>
+    <div class="flash-diff-btn" onclick="selectFlashDifficulty('extra')">🔴 エクストラ</div>
+    <div class="flash-sub-grid hidden" id="flashExtraChoice">
+      <div style="font-size:11px;color:var(--muted);">エクストラの種類を選択</div>
+      <div class="flash-diff-btn" onclick="startFlashGame('extra')">⚡ レギュラー（注文数が多いだけ）</div>
+      <div class="flash-diff-btn" onclick="showFlashSubGrid()">🎯 特別メニューを選ぶ</div>
+    </div>
     <div class="flash-sub-grid hidden" id="flashSubGrid">
-      <div style="font-size:11px;color:var(--muted);">エクストラモードを選択</div>
+      <div style="font-size:11px;color:var(--muted);">特別メニューを選択</div>
       <div class="flash-diff-btn" onclick="startFlashGame('extra','winter')">❄️ 冬モード</div>
-      <div class="flash-diff-btn" onclick="startFlashGame('extra','jp')">🎤 ジャニーズモード</div>
+      <div class="flash-diff-btn" onclick="startFlashGame('extra','jp')">🎤 ジャニーズモード（ノンアル限定）</div>
       <div class="flash-diff-btn" onclick="startFlashGame('extra','event')">🎪 イベントモード</div>
     </div>
+    <button class="btn-px btn-ghost" onclick="openFlashMenuList()" style="margin-top:8px;">📋 商品メニューを見る</button>
+  </div>
+
+  <!-- 商品メニュー一覧画面 -->
+  <div class="flash-setup hidden" id="flashMenuList" style="overflow-y:auto;max-height:100%;">
+    <div style="font-family:'Press Start 2P',monospace;font-size:9px;color:var(--accent3);text-align:center;">商品メニュー</div>
+    <div id="flashMenuListContent" style="display:flex;flex-direction:column;gap:4px;"></div>
+    <button class="btn-px btn-ghost" onclick="closeFlashMenuList()" style="margin-top:8px;">戻る</button>
   </div>
 
   <!-- プレイ画面 -->
@@ -1299,6 +1312,7 @@ const FLASH_ITEMS = {
   easy: [
     {name:'ソフトドリンク', price:250, freq:5.5},
     {name:'アイスコーヒー', price:400, freq:0.7},
+    {name:'レッドブル', price:500, freq:3.5},
     {name:'もちコロ', price:400, freq:6.0},
     {name:'ふるふるポテト', price:500, freq:7.0},
     {name:'粗挽きジャンボフランク', price:500, freq:6.8},
@@ -1336,7 +1350,7 @@ const FLASH_ITEMS = {
 
 // ドリンクかどうかの判定（フード:ドリンク=6:4比率に使う）
 const FLASH_DRINK_NAMES = new Set([
-  'ソフトドリンク','アイスコーヒー','ハイボール','氷結','スミノフ','生ビール',
+  'ソフトドリンク','アイスコーヒー','レッドブル','ハイボール','氷結','スミノフ','生ビール',
   'レッドブルウォッカ シングル','レッドブルウォッカ ダブル','ホットコーヒー',
   'カラーソーダ','コラボドリンク（ノンアル）','コラボドリンク（アルコール）'
 ]);
@@ -1349,6 +1363,8 @@ function openFlashGameSetup(){
   document.getElementById('flashPlay').style.display='none';
   document.getElementById('flashResult').style.display='none';
   document.getElementById('flashSubGrid').classList.add('hidden');
+  document.getElementById('flashExtraChoice').classList.add('hidden');
+  document.getElementById('flashMenuList').classList.add('hidden');
 }
 
 function exitFlashGame(){
@@ -1359,10 +1375,15 @@ function exitFlashGame(){
 
 function selectFlashDifficulty(diff){
   if(diff === 'extra'){
-    document.getElementById('flashSubGrid').classList.remove('hidden');
+    document.getElementById('flashExtraChoice').classList.remove('hidden');
     return;
   }
   startFlashGame(diff);
+}
+
+function showFlashSubGrid(){
+  document.getElementById('flashExtraChoice').classList.add('hidden');
+  document.getElementById('flashSubGrid').classList.remove('hidden');
 }
 
 function buildFlashPool(difficulty, subMode){
@@ -1372,6 +1393,11 @@ function buildFlashPool(difficulty, subMode){
   }
   if(difficulty === 'extra' && subMode){
     pool = pool.concat(FLASH_ITEMS[subMode] || []);
+    // ジャニーズモードはアルコール無し
+    if(subMode === 'jp'){
+      const alcoholNames = new Set(FLASH_ITEMS.alcohol.map(i=>i.name));
+      pool = pool.filter(i => !alcoholNames.has(i.name));
+    }
   }
   return pool;
 }
@@ -1389,6 +1415,38 @@ function weightedPick(pool, excludeOncePerOrder){
     if(r <= 0) return item;
   }
   return candidates[candidates.length-1];
+}
+
+function openFlashMenuList(){
+  document.getElementById('flashSetup').style.display='none';
+  document.getElementById('flashMenuList').classList.remove('hidden');
+
+  const allItems = [
+    ...FLASH_ITEMS.easy.map(i=>({...i, category:'イージー'})),
+    ...FLASH_ITEMS.alcohol.map(i=>({...i, category:'ノーマル（アルコール）'})),
+    ...FLASH_ITEMS.winter.map(i=>({...i, category:'エクストラ・冬'})),
+    ...FLASH_ITEMS.jp.map(i=>({...i, category:'エクストラ・ジャニーズ（ノンアル限定）'})),
+    ...FLASH_ITEMS.event.map(i=>({...i, category:'エクストラ・イベント'})),
+  ];
+
+  let html = '';
+  let curCat = null;
+  for(const item of allItems){
+    if(item.category !== curCat){
+      html += `<div style="font-size:11px;color:var(--accent4);margin-top:8px;">${esc(item.category)}</div>`;
+      curCat = item.category;
+    }
+    html += `<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid var(--border);">
+      <span>${esc(item.name)}${item.oncePerOrder?' <span style="font-size:10px;color:var(--accent2);">(1回まで)</span>':''}</span>
+      <span style="color:var(--accent3);font-family:'Press Start 2P',monospace;font-size:11px;">¥${item.price.toLocaleString()}</span>
+    </div>`;
+  }
+  document.getElementById('flashMenuListContent').innerHTML = html;
+}
+
+function closeFlashMenuList(){
+  document.getElementById('flashMenuList').classList.add('hidden');
+  document.getElementById('flashSetup').style.display='flex';
 }
 
 function startFlashGame(difficulty, subMode){
@@ -1434,9 +1492,9 @@ function showNextFlashItem(){
   const item = st.items[st.index];
   document.getElementById('flashProgress').textContent = `${st.index+1} / ${st.items.length}`;
   document.getElementById('flashItemName').textContent = item.name;
-  document.getElementById('flashItemPrice').textContent = `¥${item.price.toLocaleString()}`;
+  document.getElementById('flashItemPrice').textContent = '';
   st.index++;
-  st.timer = setTimeout(showNextFlashItem, 1800);
+  st.timer = setTimeout(showNextFlashItem, 1000);
 }
 
 function showFlashAnswerInput(){
