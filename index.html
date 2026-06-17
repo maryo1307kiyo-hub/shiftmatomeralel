@@ -1437,7 +1437,7 @@ function openFlashMenuList(){
       curCat = item.category;
     }
     html += `<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid var(--border);">
-      <span>${esc(item.name)}${item.oncePerOrder?' <span style="font-size:10px;color:var(--accent2);">(1回まで)</span>':''}</span>
+      <span>${esc(item.name)}</span>
       <span style="color:var(--accent3);font-family:'Press Start 2P',monospace;font-size:11px;">¥${item.price.toLocaleString()}</span>
     </div>`;
   }
