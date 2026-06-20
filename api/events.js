@@ -22,28 +22,46 @@ export default async function handler(req, res) {
     if (!response.ok) return res.status(response.status).json({ error: `HTTP ${response.status}` });
 
     const html = await response.text();
-    const events = parseEvents(html, year, month);
+    const events = parseEvents(html);
     return res.status(200).json({ events });
   } catch(e) {
     return res.status(500).json({ error: e.message });
   }
 }
 
-function parseEvents(html, year, month) {
+function parseEvents(html) {
   const events = [];
-  const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  // タグを除去してテキスト化
+  const text = html
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/\s+/g, ' ');
 
-  // 日付パターン: "2026.06.02 コンサート イベント名"
-  const pattern = new RegExp(`${year}\\.${String(month).padStart(2,'0')}\\.(\\d{2})\\s+(コンサート|スポーツ|その他|展示|格闘技|プロレス|バスケットボール|バレーボール)\\s+([^2]+?)(?=\\s*${year}|$)`, 'g');
+  // "2026.06.13  コンサート イベント名\n開場..." 形式
+  // 日付とジャンルはセットで出現する
+  const dateTypePattern = /(\d{4})\.(\d{2})\.(\d{2})\s+(コンサート|スポーツ|その他|展示|格闘技|プロレス|バスケットボール|バレーボール)\s+/g;
 
   let match;
-  while ((match = pattern.exec(text)) !== null) {
-    const day = match[1];
-    const type = match[2];
-    const name = match[3].trim().slice(0, 40);
-    const date = `${year}-${String(month).padStart(2,'0')}-${day}`;
+  while ((match = dateTypePattern.exec(text)) !== null) {
+    const year = match[1];
+    const mo = match[2];
+    const day = match[3];
+    const type = match[4];
 
-    events.push({ date, type, name });
+    // ジャンルの直後から「開場」「開演」「次の日付」が来るまでをイベント名として取得
+    const afterMatch = text.slice(match.index + match[0].length);
+    const nameMatch = afterMatch.match(/^([^\n]{2,60?)(?:\s+(?:開場|開演|終演|\d{4}\.))/);
+    if (!nameMatch) continue;
+
+    const name = nameMatch[1].trim().slice(0, 40);
+    if (!name || name.length < 2) continue;
+
+    events.push({
+      date: `${year}-${mo}-${day}`,
+      type,
+      name
+    });
   }
 
   return events;
