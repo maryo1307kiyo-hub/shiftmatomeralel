@@ -32,8 +32,8 @@ export default async function handler(req, res) {
   const { groupId, force } = req.query;
   if (!groupId) return res.status(400).json({ error: 'groupId required' });
 
-  // キャッシュキー
   const cacheKey = `shifts:${groupId}`;
+  const pendingCacheKey = `pending:${groupId}`;
 
   // 強制更新でない場合はキャッシュを確認
   if (force !== '1') {
@@ -50,6 +50,9 @@ export default async function handler(req, res) {
     return res.status(200).json({ results: [], cachedAt: null });
   }
 
+  // 前回の申請シフトキャッシュを取得（申請ページが消えた期間のバックアップ）
+  const prevPendingCache = await redisGet(pendingCacheKey) || {};
+
   // 全員分のシフトを取得
   const results = await Promise.all(members.map(async (member, idx) => {
     try {
@@ -57,11 +60,32 @@ export default async function handler(req, res) {
       const r = await fetch(apiUrl);
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const d = await r.json();
-      return { name: member.name, colorIdx: idx, ...d };
+
+      // 申請シフトの処理
+      let pendingShifts = d.pendingShifts || [];
+      const rejectedShifts = d.rejectedShifts || [];
+      const confirmedDates = new Set((d.shifts || []).map(s => s.date));
+      const rejectedDates = new Set(rejectedShifts.map(s => s.date));
+
+      if (pendingShifts.length > 0) {
+        // 申請ページが取得できた → キャッシュを更新
+        prevPendingCache[member.name] = pendingShifts;
+      } else if (prevPendingCache[member.name]) {
+        // 申請ページが空 → 前回キャッシュを使う
+        // ただし確定済みや不採用（---）になった日付は除外
+        pendingShifts = prevPendingCache[member.name].filter(s =>
+          !confirmedDates.has(s.date) && !rejectedDates.has(s.date)
+        );
+      }
+
+      return { name: member.name, colorIdx: idx, ...d, pendingShifts };
     } catch(e) {
       return { name: member.name, colorIdx: idx, error: e.message, shifts: [], pendingShifts: [], rejectedShifts: [] };
     }
   }));
+
+  // 申請キャッシュを保存
+  await redisSet(pendingCacheKey, prevPendingCache);
 
   const now = new Date().toISOString();
   const data = { results, cachedAt: now, fromCache: false };
@@ -70,17 +94,13 @@ export default async function handler(req, res) {
   return res.status(200).json(data);
 }
 
-// 半月ごとに自動更新（1日と16日を超えたら）
+// 半月ごとに自動更新（6日と21日を超えたら）
 function shouldRefresh(cachedAt) {
   if (!cachedAt) return true;
   const cached = new Date(cachedAt);
   const now = new Date();
-
-  // キャッシュと現在で「期」が変わったか確認
-  // 期: 1〜15日 = 前半, 16〜末日 = 後半
   const cachedPeriod = getPeriod(cached);
   const nowPeriod = getPeriod(now);
-
   return cachedPeriod !== nowPeriod;
 }
 
@@ -91,7 +111,6 @@ function getPeriod(date) {
   const half = d <= 6 ? 0 : d <= 21 ? 1 : 2;
   return `${y}-${m}-${half}`;
 }
-
 
 function getBaseUrl(req) {
   const proto = req.headers['x-forwarded-proto'] || 'https';
