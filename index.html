@@ -303,6 +303,24 @@
           <div class="ranking-list" id="tapAllTimeRanking"></div>
         </div>
 
+        <div class="section">
+          <div class="section-label">🔧 シフター入力設定</div>
+          <div id="adminLoginArea" style="display:flex;flex-direction:column;gap:8px;">
+            <div style="font-size:11px;color:var(--muted);">管理者パスワード</div>
+            <input type="password" id="adminPwInput" placeholder="管理者パスワード" autocomplete="off">
+            <button class="btn-px btn-ghost btn-sm" onclick="openAdminPanel()">管理画面を開く</button>
+          </div>
+          <div id="adminPanel" style="display:none;flex-direction:column;gap:10px;">
+            <div style="font-size:12px;color:var(--accent3);">✓ 管理者認証済み</div>
+            <div style="font-size:11px;color:var(--muted);">リセットするメンバーを選択</div>
+            <select id="adminMemberSelect" style="background:#080814;border:2px solid var(--muted);color:var(--text);font-family:inherit;font-size:14px;padding:8px;width:100%;outline:none;"></select>
+            <div style="font-size:11px;color:var(--muted);">新しいパスワード（空欄でリセット）</div>
+            <input type="text" id="adminNewPw" placeholder="新パスワード（空欄=削除して再設定可能にする）" autocomplete="off">
+            <button class="btn-px btn-primary" style="background:var(--accent3);" onclick="adminResetPassword()">実行する</button>
+            <button class="btn-px btn-red btn-sm" onclick="closeAdminPanel()">管理画面を閉じる</button>
+          </div>
+        </div>
+
       </div>
     </div>
   </div>
@@ -1822,6 +1840,56 @@ function closeApply() {
 
 function closeApplyOutside(e) {
   if (e.target.id === 'applyOverlay') closeApply();
+}
+
+// ===== 管理者パネル =====
+let adminPassword = null;
+
+function openAdminPanel(){
+  const pw = document.getElementById('adminPwInput').value.trim();
+  if(!pw){ showToast('管理者パスワードを入力してください'); return; }
+  adminPassword = pw;
+  // メンバー一覧をセレクトに設定
+  const sel = document.getElementById('adminMemberSelect');
+  sel.innerHTML = members.map(m => `<option value="${esc(m.name)}">${esc(m.name)}</option>`).join('');
+  document.getElementById('adminLoginArea').style.display = 'none';
+  document.getElementById('adminPanel').style.display = 'flex';
+}
+
+function closeAdminPanel(){
+  adminPassword = null;
+  document.getElementById('adminPwInput').value = '';
+  document.getElementById('adminNewPw').value = '';
+  document.getElementById('adminPanel').style.display = 'none';
+  document.getElementById('adminLoginArea').style.display = 'flex';
+}
+
+async function adminResetPassword(){
+  const name = document.getElementById('adminMemberSelect').value;
+  const newPw = document.getElementById('adminNewPw').value.trim();
+  if(!name){ showToast('メンバーを選択してください'); return; }
+
+  const action = newPw ? 'set' : 'reset';
+  if(newPw && newPw.length < 4){ showToast('4文字以上で設定してください'); return; }
+
+  try{
+    const r = await fetch('/api/admin-shift', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ action, adminPassword, groupId, name, newPassword: newPw })
+    });
+    const d = await r.json();
+    if(d.error){ showToast(d.error); return; }
+
+    // localStorageのパスワードキャッシュも削除
+    localStorage.removeItem('applyPw_' + groupId + '_' + name);
+    document.getElementById('adminNewPw').value = '';
+
+    if(action === 'reset'){
+      showToast(`${name} のパスワードをリセットしました`);
+    } else {
+      showToast(`${name} のパスワードを変更しました`);
+    }
+  }catch(e){ showToast('エラーが発生しました'); }
 }
 
 // ===== ユーティリティ =====
