@@ -80,6 +80,9 @@ export default async function handler(req, res) {
       formData.append(`sr[${date}]`, time);
     }
 
+    const bodyStr = formData.toString();
+    console.log('POST body:', bodyStr);
+
     try {
       const ciftrRes = await fetch(`${baseHost}/shift/bulk_edit`, {
         method: 'POST',
@@ -89,7 +92,7 @@ export default async function handler(req, res) {
           'Origin': baseHost,
           'Referer': bulkEditUrl,
         },
-        body: formData.toString()
+        body: bodyStr
       });
 
       if (!ciftrRes.ok) {
