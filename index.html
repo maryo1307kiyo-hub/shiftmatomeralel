@@ -574,7 +574,7 @@ const DAY=['日','月','火','水','木','金','土'];
 const C=['c0','c1','c2','c3','c4','c5','c6','c7'];
 const BG=['bg0','bg1','bg2','bg3','bg4','bg5','bg6','bg7'];
 const LOADING_MSGS=['みんなのシフトを集めてるよ','もうちょっとだけ待ってね！','ciftrにアクセス中...','データを整理してるよ','あとちょっと！'];
-let members=[], groupId=null, loadingMsgTimer=null, lastShiftData=null, lastResults=null;
+let members=[], groupId=null, loadingMsgTimer=null, lastShiftData=null, lastResults=null, skipNextBgRefresh=false;
 
 // ===== グループ =====
 function createGroup(){
@@ -791,6 +791,7 @@ async function fetchAll(force=false){
 // ===== バックグラウンド更新 =====
 async function bgRefresh(){
   if(!groupId||!members.length) return;
+  if(skipNextBgRefresh){ skipNextBgRefresh=false; return; }
   try{
     const r=await fetch(`/api/get-shifts?groupId=${encodeURIComponent(groupId)}&force=1`);
     if(!r.ok) return;
@@ -1849,6 +1850,7 @@ async function submitApply() {
     });
     const d = await r.json();
     if (d.error) { showToast(d.error); return; }
+    skipNextBgRefresh = true;
     showToast('申請しました！次回更新時に反映されます');
     closeApply();
   } catch(e) { showToast('申請に失敗しました'); }
