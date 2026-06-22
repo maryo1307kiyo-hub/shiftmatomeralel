@@ -191,6 +191,20 @@
     .stat-label{font-size:12px;color:var(--muted)}
     .stat-value{font-family:'Press Start 2P',monospace;font-size:9px;color:var(--accent3)}
     .status-bar{position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:var(--px) solid var(--border);padding:6px 14px;display:flex;justify-content:space-between;font-size:11px;color:var(--muted);z-index:98}
+    /* シフト申請 */
+    .apply-overlay{position:fixed;inset:0;background:#00000099;z-index:300;display:flex;align-items:flex-end}
+    .apply-overlay.hidden{display:none}
+    .apply-sheet{background:var(--bg);border-top:2px solid var(--accent3);width:100%;max-height:92vh;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
+    .apply-header{display:flex;align-items:center;justify-content:space-between}
+    .apply-title{font-family:'Press Start 2P',monospace;font-size:8px;color:var(--accent3)}
+    .date-row-apply{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)}
+    .date-label-apply{font-size:13px;min-width:90px}
+    .date-label-apply.sat{color:#5599bb}.date-label-apply.sun{color:#aa4455}
+    .time-inputs{display:flex;align-items:center;gap:4px;flex:1}
+    .time-input{background:#080814;border:1px solid var(--muted);color:var(--text);font-family:'DotGothic16',monospace;font-size:13px;padding:4px 6px;width:64px;text-align:center;-webkit-appearance:none}
+    .time-input:focus{border-color:var(--accent3)}
+    .time-sep{color:var(--muted);font-size:12px}
+    .time-clear{background:transparent;border:none;color:var(--muted);font-size:16px;cursor:pointer;padding:2px 6px}
     .toast{position:fixed;bottom:36px;left:50%;transform:translateX(-50%);background:var(--surface);color:var(--accent3);font-size:12px;padding:8px 16px;border:var(--px) solid var(--accent3);box-shadow:3px 3px 0 #224433;z-index:999;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .2s}
     .toast.show{opacity:1}
   </style>
@@ -299,6 +313,40 @@
   <span id="statusText">▶ READY</span>
   <span id="lastUpdated"></span>
 </div>
+
+<!-- シフト申請モーダル -->
+<div class="apply-overlay hidden" id="applyOverlay" onclick="closeApplyOutside(event)">
+  <div class="apply-sheet" id="applySheet">
+    <div class="apply-header">
+      <span class="apply-title" id="applyTitle">シフト申請</span>
+      <button class="btn-px btn-red btn-sm" onclick="closeApply()">✕</button>
+    </div>
+
+    <!-- パスワード設定画面 -->
+    <div id="applySetPassword" style="display:none;flex-direction:column;gap:10px;">
+      <div style="font-size:12px;color:var(--muted);">初回設定：このニックネーム専用のパスワードを設定してください</div>
+      <div style="font-size:11px;color:var(--muted);">パスワード（4文字以上）</div>
+      <input type="password" id="applyNewPw" placeholder="パスワードを設定" autocomplete="new-password">
+      <input type="password" id="applyNewPw2" placeholder="確認入力" autocomplete="new-password">
+      <button class="btn-px btn-primary" style="background:var(--accent3);" onclick="submitSetPassword()">設定する</button>
+    </div>
+
+    <!-- パスワード入力画面 -->
+    <div id="applyLoginPassword" style="display:none;flex-direction:column;gap:10px;">
+      <div style="font-size:12px;color:var(--muted);" id="applyLoginMsg">パスワードを入力してください</div>
+      <input type="password" id="applyPw" placeholder="パスワード" autocomplete="current-password">
+      <button class="btn-px btn-primary" style="background:var(--accent3);" onclick="submitVerifyPassword()">確認</button>
+    </div>
+
+    <!-- 申請入力画面 -->
+    <div id="applyInputArea" style="display:none;flex-direction:column;gap:8px;">
+      <div style="font-size:12px;color:var(--muted);">申請する時間を入力してください（空欄は申請なし）</div>
+      <div id="applyDateList"></div>
+      <button class="btn-px btn-primary" style="background:var(--accent3);" onclick="submitApply()">申請する ▶</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <!-- メニュー（左下） -->
@@ -756,6 +804,7 @@ function renderMembers(){
         <div class="member-url">${esc(maskCiftrUrl(m.url))}</div>
       </div>
       <button class="btn-px btn-ghost btn-sm" onclick="exportMemberCal('${esc(m.name)}')" style="font-size:10px;padding:3px 8px;">📅</button>
+      <button class="btn-px btn-ghost btn-sm" onclick="openApply('${esc(m.url)}','${esc(m.name)}')" style="font-size:10px;padding:3px 6px;">📝</button>
       <button class="btn-px btn-ghost btn-sm" onclick="editNickname('${esc(m.url)}','${esc(m.name)}')" style="font-size:10px;padding:3px 6px;">✏️</button>
       <button class="btn-px btn-ghost btn-sm" onclick="editColor('${esc(m.url)}','${esc(m.name)}')" style="font-size:10px;padding:3px 6px;">🎨</button>
       <button class="btn-px btn-red" onclick="removeMember('${esc(m.url)}','${esc(m.name)}')">DEL</button>
@@ -1590,6 +1639,189 @@ function toggleMenu(){
 }
 function closeMenu(){
   document.getElementById('menuWrap').classList.remove('open');
+}
+
+
+// ===== シフト申請 =====
+const DAY_JP=['日','月','火','水','木','金','土'];
+let applyState = { url:'', name:'', dates:[] };
+
+// 申請可能な日付一覧を生成（ciftrの締め切りに準じる）
+function getApplicableDates() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth(); // 0-indexed
+  const d = now.getDate();
+  const dates = [];
+
+  // 締め切りルール：
+  // 1〜5日: 後半受付中（当月16日〜翌月末）
+  // 6〜20日: 前半受付中（翌月1日〜翌月15日）
+  // 21日〜末日: 後半受付中（翌月16日〜翌々月末）
+
+  let startDate, endDate;
+  if (d <= 5) {
+    // 当月16日〜翌月末まで表示
+    startDate = new Date(y, m, 16);
+    endDate = new Date(y, m + 2, 0); // 翌月末
+  } else if (d <= 20) {
+    // 翌月1日〜翌月15日まで表示
+    startDate = new Date(y, m + 1, 1);
+    endDate = new Date(y, m + 1, 15);
+  } else {
+    // 翌月16日〜翌々月末まで表示
+    startDate = new Date(y, m + 1, 16);
+    endDate = new Date(y, m + 2, 0);
+  }
+
+  const cur = new Date(startDate);
+  while (cur <= endDate) {
+    dates.push(new Date(cur));
+    cur.setDate(cur.getDate() + 1);
+  }
+  return dates;
+}
+
+function openApply(url, name) {
+  applyState = { url, name, dates: getApplicableDates() };
+  document.getElementById('applyTitle').textContent = name + ' のシフト申請';
+  document.getElementById('applyOverlay').classList.remove('hidden');
+
+  // パスワード設定済みか確認
+  const savedPw = localStorage.getItem('applyPw_' + groupId + '_' + name);
+  if (savedPw) {
+    // パスワード保存済み→直接申請画面へ
+    applyState.password = savedPw;
+    showApplyInput();
+  } else {
+    // 未設定→パスワード確認（設定or入力）
+    checkPasswordExists(name);
+  }
+}
+
+async function checkPasswordExists(name) {
+  try {
+    const r = await fetch('/api/submit-shift?action=verify-password', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ groupId, name, password: '__check__' })
+    });
+    const d = await r.json();
+    if (d.error === 'not-set') {
+      // 未設定→設定画面
+      showApplyScreen('applySetPassword');
+    } else {
+      // 設定済み→パスワード入力画面
+      showApplyScreen('applyLoginPassword');
+    }
+  } catch(e) {
+    showApplyScreen('applyLoginPassword');
+  }
+}
+
+function showApplyScreen(id) {
+  ['applySetPassword','applyLoginPassword','applyInputArea'].forEach(s => {
+    document.getElementById(s).style.display = 'none';
+  });
+  document.getElementById(id).style.display = 'flex';
+}
+
+async function submitSetPassword() {
+  const pw = document.getElementById('applyNewPw').value;
+  const pw2 = document.getElementById('applyNewPw2').value;
+  if (!pw || pw.length < 4) { showToast('4文字以上で設定してください'); return; }
+  if (pw !== pw2) { showToast('パスワードが一致しません'); return; }
+  try {
+    const r = await fetch('/api/submit-shift?action=set-password', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ groupId, name: applyState.name, password: pw })
+    });
+    const d = await r.json();
+    if (d.error) { showToast(d.error); return; }
+    // 保存してから申請画面へ
+    localStorage.setItem('applyPw_' + groupId + '_' + applyState.name, pw);
+    applyState.password = pw;
+    showApplyInput();
+    showToast('パスワードを設定しました');
+  } catch(e) { showToast('エラーが発生しました'); }
+}
+
+async function submitVerifyPassword() {
+  const pw = document.getElementById('applyPw').value;
+  if (!pw) { showToast('パスワードを入力してください'); return; }
+  try {
+    const r = await fetch('/api/submit-shift?action=verify-password', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ groupId, name: applyState.name, password: pw })
+    });
+    const d = await r.json();
+    if (d.error) { showToast(d.error); return; }
+    // 保存してから申請画面へ
+    localStorage.setItem('applyPw_' + groupId + '_' + applyState.name, pw);
+    applyState.password = pw;
+    showApplyInput();
+  } catch(e) { showToast('エラーが発生しました'); }
+}
+
+function showApplyInput() {
+  showApplyScreen('applyInputArea');
+  const list = document.getElementById('applyDateList');
+  const dates = applyState.dates;
+
+  list.innerHTML = dates.map(dt => {
+    const dateStr = dt.toLocaleDateString('sv-SE').replace(/-/g,'');
+    const mo = dt.getMonth()+1;
+    const d2 = dt.getDate();
+    const dow = dt.getDay();
+    const dcls = dow===0?'sun':dow===6?'sat':'';
+    return `<div class="date-row-apply"><span class="date-label-apply ${dcls}">${mo}/${d2}（${DAY_JP[dow]}）</span><div class="time-inputs"><input class="time-input" type="text" id="st_${dateStr}" placeholder="10:00" maxlength="5" inputmode="numeric"><span class="time-sep">〜</span><input class="time-input" type="text" id="en_${dateStr}" placeholder="18:00" maxlength="5" inputmode="numeric"><button class="time-clear" onclick="clearTimeRow('${dateStr}')">✕</button></div></div>`;
+  }).join('');
+}
+
+function clearTimeRow(dateStr) {
+  document.getElementById('st_' + dateStr).value = '';
+  document.getElementById('en_' + dateStr).value = '';
+}
+
+async function submitApply() {
+  const shifts = {};
+  let hasAny = false;
+  for (const dt of applyState.dates) {
+    const dateStr = dt.toLocaleDateString('sv-SE').replace(/-/g,'');
+    const st = (document.getElementById('st_' + dateStr)?.value || '').replace(':', '').trim();
+    const en = (document.getElementById('en_' + dateStr)?.value || '').replace(':', '').trim();
+    if (st && en) {
+      shifts[dateStr] = st + '+' + en;
+      hasAny = true;
+    } else {
+      shifts[dateStr] = '';
+    }
+  }
+
+  if (!hasAny) { showToast('申請する日程を入力してください'); return; }
+
+  try {
+    const r = await fetch('/api/submit-shift?action=submit', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ groupId, name: applyState.name, password: applyState.password, url: applyState.url, shifts })
+    });
+    const d = await r.json();
+    if (d.error) { showToast(d.error); return; }
+    showToast('申請しました！');
+    closeApply();
+    // シフトを再取得
+    setTimeout(() => fetchAll(true), 1000);
+  } catch(e) { showToast('申請に失敗しました'); }
+}
+
+function closeApply() {
+  document.getElementById('applyOverlay').classList.add('hidden');
+  document.getElementById('applyNewPw').value = '';
+  document.getElementById('applyNewPw2').value = '';
+  document.getElementById('applyPw').value = '';
+}
+
+function closeApplyOutside(e) {
+  if (e.target.id === 'applyOverlay') closeApply();
 }
 
 // ===== ユーティリティ =====
