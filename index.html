@@ -1796,13 +1796,27 @@ function showApplyInput() {
   const list = document.getElementById('applyDateList');
   const dates = applyState.dates;
 
+  // 現在の申請シフトを既存データから取得
+  const existingShifts = {};
+  if(lastResults) {
+    const memberData = lastResults.find(r => r.name === applyState.name);
+    if(memberData && memberData.pendingShifts) {
+      for(const s of memberData.pendingShifts) {
+        // "15:30" → "1530" 形式に変換
+        const st = s.start.replace(':', '');
+        const en = s.end.replace(':', '');
+        existingShifts[s.date.replace(/-/g,'')] = st + ' ' + en;
+      }
+    }
+  }
+
   list.innerHTML = dates.map(dt => {
     const dateStr = dt.toLocaleDateString('sv-SE').replace(/-/g,'');
     const mo = dt.getMonth()+1;
     const d2 = dt.getDate();
     const dow = dt.getDay();
     const dcls = dow===0?'sun':dow===6?'sat':'';
-    return `<div class="date-row-apply"><span class="date-label-apply ${dcls}">${mo}/${d2}（${DAY_JP[dow]}）</span><div class="time-inputs"><input class="time-input" type="text" id="tr_${dateStr}" placeholder="1000 1800" maxlength="9" inputmode="numeric" style="width:120px;"><button class="time-clear" onclick="clearTimeRow('${dateStr}')">✕</button></div></div>`;
+    return `<div class="date-row-apply"><span class="date-label-apply ${dcls}">${mo}/${d2}（${DAY_JP[dow]}）</span><div class="time-inputs"><input class="time-input" type="text" id="tr_${dateStr}" placeholder="1000 1800" maxlength="9" inputmode="text" style="width:120px;" value="${existingShifts[dateStr]||''}"><button class="time-clear" onclick="clearTimeRow('${dateStr}')">✕</button></div></div>`;
   }).join('');
 }
 
