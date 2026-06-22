@@ -63,9 +63,14 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: 'パスワードが違います' });
     }
 
-    // sパラメータを取得
-    const sParam = url.match(/[?&]s=([^&]+)/)?.[1];
+    // sパラメータを取得（クエリ型・パス型両対応）
+    const sParam = url.match(/[?&]s=([^&]+)/)?.[1]
+                || url.match(/\/login\/\d+\/(\d+\/\d+)/)?.[0];
     if (!sParam) return res.status(400).json({ error: '無効なURL' });
+
+    // 常にbulk_editエンドポイントに送信
+    const baseHost = url.includes('m.s1.ciftr.jp') ? 'http://m.s1.ciftr.jp' : 'https://m-s1.ciftr.jp';
+    const bulkEditUrl = `${baseHost}/shift/bulk_edit?s=${sParam}`;
 
     // shiftsは { "20260718": "1030+1900", "20260720": "" } 形式
     const formData = new URLSearchParams();
@@ -76,13 +81,13 @@ export default async function handler(req, res) {
     }
 
     try {
-      const ciftrRes = await fetch('https://m-s1.ciftr.jp/shift/bulk_edit', {
+      const ciftrRes = await fetch(`${baseHost}/shift/bulk_edit`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
           'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15',
-          'Origin': 'https://m-s1.ciftr.jp',
-          'Referer': `https://m-s1.ciftr.jp/shift/bulk_edit?s=${sParam}`,
+          'Origin': baseHost,
+          'Referer': bulkEditUrl,
         },
         body: formData.toString()
       });
