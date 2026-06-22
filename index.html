@@ -1849,10 +1849,8 @@ async function submitApply() {
     });
     const d = await r.json();
     if (d.error) { showToast(d.error); return; }
-    showToast('申請しました！');
+    showToast('申請しました！次回更新時に反映されます');
     closeApply();
-    // シフトを再取得
-    setTimeout(() => fetchAll(true), 1000);
   } catch(e) { showToast('申請に失敗しました'); }
 }
 
