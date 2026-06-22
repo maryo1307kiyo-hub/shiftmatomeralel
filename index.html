@@ -155,6 +155,7 @@
     .menu-item-btn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 #664400}
     .menu-fab{width:60px;height:44px;background:var(--surface);border:var(--px) solid var(--accent);box-shadow:3px 3px 0 #2a4477;display:flex;align-items:center;justify-content:center;font-family:'DotGothic16',monospace;font-size:11px;color:var(--accent);cursor:pointer;}
     .menu-fab:active{transform:translate(2px,2px);box-shadow:1px 1px 0 #2a4477}
+    .menu-item-text{width:auto;min-width:80px;font-size:11px;font-family:'DotGothic16',monospace;color:var(--accent3);border-color:var(--accent3);box-shadow:3px 3px 0 #224433;}
     /* フラッシュ会計 */
     .flash-overlay{position:fixed;inset:0;background:var(--bg);z-index:350;display:flex;flex-direction:column}
     .flash-overlay.hidden{display:none}
@@ -340,6 +341,12 @@
       <button class="btn-px btn-red btn-sm" onclick="closeApply()">✕</button>
     </div>
 
+    <!-- メンバー選択画面 -->
+    <div id="applyMemberSelect" style="display:none;flex-direction:column;gap:10px;">
+      <div style="font-size:12px;color:var(--muted);">申請するメンバーを選択してください</div>
+      <div id="applyMemberList" style="display:flex;flex-direction:column;gap:6px;"></div>
+    </div>
+
     <!-- パスワード設定画面 -->
     <div id="applySetPassword" style="display:none;flex-direction:column;gap:10px;">
       <div style="font-size:12px;color:var(--muted);">初回設定：このニックネーム専用のパスワードを設定してください</div>
@@ -358,7 +365,7 @@
 
     <!-- 申請入力画面 -->
     <div id="applyInputArea" style="display:none;flex-direction:column;gap:8px;">
-      <div style="font-size:12px;color:var(--muted);">申請する時間を入力してください（空欄は申請なし）</div>
+      <div style="font-size:12px;color:var(--muted);">申請する時間を入力してください（例: 1000 1800）空欄は申請なし</div>
       <div id="applyDateList"></div>
       <button class="btn-px btn-primary" style="background:var(--accent3);" onclick="submitApply()">申請する ▶</button>
     </div>
@@ -373,6 +380,7 @@
     <button class="menu-item-btn" onclick="openMypage();closeMenu()" title="マイページ">👤</button>
     <button class="menu-item-btn" onclick="openFortune();closeMenu()" title="今日の運勢">🔮</button>
     <button class="menu-item-btn" onclick="openFlashGameSetup();closeMenu()" title="フラッシュ会計">🧮</button>
+    <button class="menu-item-btn menu-item-text" onclick="openApplyMenu();closeMenu()" title="シフト申請">シフト申請</button>
   </div>
   <button class="menu-fab" id="menuFab" onclick="toggleMenu()">MENU</button>
 </div>
@@ -822,7 +830,6 @@ function renderMembers(){
         <div class="member-url">${esc(maskCiftrUrl(m.url))}</div>
       </div>
       <button class="btn-px btn-ghost btn-sm" onclick="exportMemberCal('${esc(m.name)}')" style="font-size:10px;padding:3px 8px;">📅</button>
-      <button class="btn-px btn-ghost btn-sm" onclick="openApply('${esc(m.url)}','${esc(m.name)}')" style="font-size:10px;padding:3px 6px;">📝</button>
       <button class="btn-px btn-ghost btn-sm" onclick="editNickname('${esc(m.url)}','${esc(m.name)}')" style="font-size:10px;padding:3px 6px;">✏️</button>
       <button class="btn-px btn-ghost btn-sm" onclick="editColor('${esc(m.url)}','${esc(m.name)}')" style="font-size:10px;padding:3px 6px;">🎨</button>
       <button class="btn-px btn-red" onclick="removeMember('${esc(m.url)}','${esc(m.name)}')">DEL</button>
@@ -1700,19 +1707,25 @@ function getApplicableDates() {
   return dates;
 }
 
+function openApplyMenu() {
+  if(!members.length){ showToast('メンバーが登録されていません'); return; }
+  document.getElementById('applyTitle').textContent = 'シフト申請';
+  document.getElementById('applyOverlay').classList.remove('hidden');
+  showApplyScreen('applyMemberSelect');
+  const list = document.getElementById('applyMemberList');
+  list.innerHTML = members.map(m =>
+    `<button class="btn-px btn-ghost" onclick="openApply('${esc(m.url)}','${esc(m.name)}')" style="width:100%;text-align:left;padding:10px 12px;">${esc(m.name)}</button>`
+  ).join('');
+}
+
 function openApply(url, name) {
   applyState = { url, name, dates: getApplicableDates() };
   document.getElementById('applyTitle').textContent = name + ' のシフト申請';
-  document.getElementById('applyOverlay').classList.remove('hidden');
-
-  // パスワード設定済みか確認
   const savedPw = localStorage.getItem('applyPw_' + groupId + '_' + name);
   if (savedPw) {
-    // パスワード保存済み→直接申請画面へ
     applyState.password = savedPw;
     showApplyInput();
   } else {
-    // 未設定→パスワード確認（設定or入力）
     checkPasswordExists(name);
   }
 }
@@ -1725,10 +1738,8 @@ async function checkPasswordExists(name) {
     });
     const d = await r.json();
     if (d.error === 'not-set') {
-      // 未設定→設定画面
       showApplyScreen('applySetPassword');
     } else {
-      // 設定済み→パスワード入力画面
       showApplyScreen('applyLoginPassword');
     }
   } catch(e) {
@@ -1737,7 +1748,7 @@ async function checkPasswordExists(name) {
 }
 
 function showApplyScreen(id) {
-  ['applySetPassword','applyLoginPassword','applyInputArea'].forEach(s => {
+  ['applyMemberSelect','applySetPassword','applyLoginPassword','applyInputArea'].forEach(s => {
     document.getElementById(s).style.display = 'none';
   });
   document.getElementById(id).style.display = 'flex';
@@ -1791,13 +1802,12 @@ function showApplyInput() {
     const d2 = dt.getDate();
     const dow = dt.getDay();
     const dcls = dow===0?'sun':dow===6?'sat':'';
-    return `<div class="date-row-apply"><span class="date-label-apply ${dcls}">${mo}/${d2}（${DAY_JP[dow]}）</span><div class="time-inputs"><input class="time-input" type="text" id="st_${dateStr}" placeholder="10:00" maxlength="5" inputmode="numeric"><span class="time-sep">〜</span><input class="time-input" type="text" id="en_${dateStr}" placeholder="18:00" maxlength="5" inputmode="numeric"><button class="time-clear" onclick="clearTimeRow('${dateStr}')">✕</button></div></div>`;
+    return `<div class="date-row-apply"><span class="date-label-apply ${dcls}">${mo}/${d2}（${DAY_JP[dow]}）</span><div class="time-inputs"><input class="time-input" type="text" id="tr_${dateStr}" placeholder="1000 1800" maxlength="9" inputmode="numeric" style="width:120px;"><button class="time-clear" onclick="clearTimeRow('${dateStr}')">✕</button></div></div>`;
   }).join('');
 }
 
 function clearTimeRow(dateStr) {
-  document.getElementById('st_' + dateStr).value = '';
-  document.getElementById('en_' + dateStr).value = '';
+  document.getElementById('tr_' + dateStr).value = '';
 }
 
 async function submitApply() {
@@ -1805,10 +1815,11 @@ async function submitApply() {
   let hasAny = false;
   for (const dt of applyState.dates) {
     const dateStr = dt.toLocaleDateString('sv-SE').replace(/-/g,'');
-    const st = (document.getElementById('st_' + dateStr)?.value || '').replace(':', '').trim();
-    const en = (document.getElementById('en_' + dateStr)?.value || '').replace(':', '').trim();
-    if (st && en) {
-      shifts[dateStr] = st + '+' + en;
+    const val = (document.getElementById('tr_' + dateStr)?.value || '').trim();
+    if (val) {
+      // "1000 1800" or "1000+1800" → "1000 1800"
+      const normalized = val.replace(/[+\-\/]/, ' ').replace(/\s+/, ' ');
+      shifts[dateStr] = normalized;
       hasAny = true;
     } else {
       shifts[dateStr] = '';
