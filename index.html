@@ -344,6 +344,7 @@
       <div style="font-size:12px;color:var(--muted);">申請するメンバーを選択してください</div>
       <div id="applyMemberList" style="display:flex;flex-direction:column;gap:6px;"></div>
     </div>
+    <iframe id="applyIframe" style="display:none;width:100%;flex:1;border:none;background:#fff;" src="about:blank"></iframe>
   </div>
 </div>
 
@@ -1645,9 +1646,43 @@ function closeMenu(){
 
 // ===== シフト申請 =====
 const DAY_JP=['日','月','火','水','木','金','土'];
+let applyState = { url:'', name:'', dates:[] };
 
 // 申請可能な日付一覧を生成（ciftrの締め切りに準じる）
+function getApplicableDates() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth(); // 0-indexed
+  const d = now.getDate();
+  const dates = [];
 
+  // 締め切りルール：
+  // 1〜5日: 後半受付中（当月16日〜翌月末）
+  // 6〜20日: 前半受付中（翌月1日〜翌月15日）
+  // 21日〜末日: 後半受付中（翌月16日〜翌々月末）
+
+  let startDate, endDate;
+  if (d <= 5) {
+    // 当月16日〜翌月末まで表示
+    startDate = new Date(y, m, 16);
+    endDate = new Date(y, m + 2, 0); // 翌月末
+  } else if (d <= 20) {
+    // 翌月1日〜翌月15日まで表示
+    startDate = new Date(y, m + 1, 1);
+    endDate = new Date(y, m + 1, 15);
+  } else {
+    // 翌月16日〜翌々月末まで表示
+    startDate = new Date(y, m + 1, 16);
+    endDate = new Date(y, m + 2, 0);
+  }
+
+  const cur = new Date(startDate);
+  while (cur <= endDate) {
+    dates.push(new Date(cur));
+    cur.setDate(cur.getDate() + 1);
+  }
+  return dates;
+}
 
 function openApplyMenu() {
   if(!members.length){ showToast('メンバーが登録されていません'); return; }
@@ -1661,28 +1696,171 @@ function openApplyMenu() {
 }
 
 function openApply(url, name) {
+  applyState = { url, name, dates: [] };
+  document.getElementById('applyTitle').textContent = name + ' のシフト申請';
+  document.getElementById('applyOverlay').classList.remove('hidden');
+
+  // sパラメータを取得してbulk_editのURLを構築
   const sParam = url.match(/[?&]s=([^&]+)/)?.[1];
   if (!sParam) { showToast('URLからsパラメータを取得できません'); return; }
+
+  const iframeUrl = `http://m.s1.ciftr.jp/shift/bulk_edit?s=${sParam}`;
+  const iframe = document.getElementById('applyIframe');
+  iframe.src = iframeUrl;
+  iframe.style.display = 'block';
+  document.getElementById('applyMemberSelect').style.display = 'none';
   closeApply();
   window.open(`http://m.s1.ciftr.jp/shift/bulk_edit?s=${sParam}`, '_blank');
 }
 
+async function checkPasswordExists(name) {
+  try {
+    const r = await fetch('/api/submit-shift?action=verify-password', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ groupId, name, password: '__check__' })
+    });
+    const d = await r.json();
+    if (d.error === 'not-set') {
+      showApplyScreen('applySetPassword');
+    } else {
+      showApplyScreen('applyLoginPassword');
+    }
+  } catch(e) {
+    showApplyScreen('applyLoginPassword');
+  }
+}
 
+function showApplyScreen(id) {
+  ['applyMemberSelect','applySetPassword','applyLoginPassword','applyInputArea'].forEach(s => {
+    const el = document.getElementById(s);
+    if(el) el.style.display = 'none';
+  });
+  const target = document.getElementById(id);
+  if(target) target.style.display = 'flex';
+}
 
+async function submitSetPassword() {
+  const pw = document.getElementById('applyNewPw').value;
+  const pw2 = document.getElementById('applyNewPw2').value;
+  if (!pw || pw.length < 4) { showToast('4文字以上で設定してください'); return; }
+  if (pw !== pw2) { showToast('パスワードが一致しません'); return; }
+  try {
+    const r = await fetch('/api/submit-shift?action=set-password', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ groupId, name: applyState.name, password: pw })
+    });
+    const d = await r.json();
+    if (d.error) { showToast(d.error); return; }
+    // 保存してから申請画面へ
+    localStorage.setItem('applyPw_' + groupId + '_' + applyState.name, pw);
+    applyState.password = pw;
+    showApplyInput();
+    showToast('パスワードを設定しました');
+  } catch(e) { showToast('エラーが発生しました'); }
+}
 
+async function submitVerifyPassword() {
+  const pw = document.getElementById('applyPw').value;
+  if (!pw) { showToast('パスワードを入力してください'); return; }
+  try {
+    const r = await fetch('/api/submit-shift?action=verify-password', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ groupId, name: applyState.name, password: pw })
+    });
+    const d = await r.json();
+    if (d.error) { showToast(d.error); return; }
+    // 保存してから申請画面へ
+    localStorage.setItem('applyPw_' + groupId + '_' + applyState.name, pw);
+    applyState.password = pw;
+    showApplyInput();
+  } catch(e) { showToast('エラーが発生しました'); }
+}
 
+function showApplyInput() {
+  showApplyScreen('applyInputArea');
+  const list = document.getElementById('applyDateList');
+  const dates = applyState.dates;
 
+  // 現在の申請シフトを既存データから取得
+  const existingShifts = {};
+  if(lastResults) {
+    const memberData = lastResults.find(r => r.name === applyState.name);
+    if(memberData && memberData.pendingShifts) {
+      for(const s of memberData.pendingShifts) {
+        // "15:30" → "1530" 形式に変換
+        const st = s.start.replace(':', '');
+        const en = s.end.replace(':', '');
+        existingShifts[s.date.replace(/-/g,'')] = st + ' ' + en;
+      }
+    }
+  }
 
+  list.innerHTML = dates.map(dt => {
+    const dateStr = dt.toLocaleDateString('sv-SE').replace(/-/g,'');
+    const mo = dt.getMonth()+1;
+    const d2 = dt.getDate();
+    const dow = dt.getDay();
+    const dcls = dow===0?'sun':dow===6?'sat':'';
+    return `<div class="date-row-apply"><span class="date-label-apply ${dcls}">${mo}/${d2}（${DAY_JP[dow]}）</span><div class="time-inputs"><input class="time-input" type="text" id="tr_${dateStr}" placeholder="1000 1800" maxlength="9" inputmode="text" style="width:120px;" value="${existingShifts[dateStr]||''}"><button class="time-clear" onclick="clearTimeRow('${dateStr}')">✕</button></div></div>`;
+  }).join('');
+}
 
+function clearTimeRow(dateStr) {
+  document.getElementById('tr_' + dateStr).value = '';
+}
 
+async function submitApply() {
+  const sParam = applyState.url.match(/[?&]s=([^&]+)/)?.[1];
+  if (!sParam) { showToast('URLからsパラメータを取得できません'); return; }
 
+  const page1 = {}, page2 = {};
+  let hasAny = false;
+  for (const dt of applyState.dates) {
+    const dateStr = dt.toLocaleDateString('sv-SE').replace(/-/g,'');
+    const val = (document.getElementById('tr_' + dateStr)?.value || '').trim();
+    if (!val) continue;
+    const normalized = val.replace(/[+\/]/, ' ').replace(/\s+/, ' ');
+    const day = parseInt(dateStr.slice(6, 8));
+    if (day >= 16) page1[dateStr] = normalized;
+    else page2[dateStr] = normalized;
+    hasAny = true;
+  }
 
+  if (!hasAny) { showToast('申請する日程を入力してください'); return; }
 
+  const submitPage = (pageNum, pageShifts) => {
+    if (Object.keys(pageShifts).length === 0) return;
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = `http://m.s1.ciftr.jp/shift/bulk_edit?p=${pageNum}&s=${sParam}`;
+    form.target = '_blank';
+    for (const [date, time] of Object.entries(pageShifts)) {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = `sr[${date}]`;
+      input.value = time;
+      form.appendChild(input);
+    }
+    document.body.appendChild(form);
+    form.submit();
+    document.body.removeChild(form);
+  };
 
+  submitPage(1, page1);
+  if (Object.keys(page2).length > 0) setTimeout(() => submitPage(2, page2), 500);
 
+  skipNextBgRefresh = true;
+  closeApply();
+  // シフトタブに戻る
+  document.querySelectorAll('.tab')[0].click();
+  showToast('申請しました！タブを閉じてまとめれーるに戻ってください');
+}
 
 function closeApply() {
   document.getElementById('applyOverlay').classList.add('hidden');
+  const iframe = document.getElementById('applyIframe');
+  iframe.src = 'about:blank';
+  iframe.style.display = 'none';
 }
 
 function closeApplyOutside(e) {
