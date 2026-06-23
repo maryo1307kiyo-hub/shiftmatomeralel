@@ -82,7 +82,8 @@ export default async function handler(req, res) {
       // ブラケットをエンコードしないよう手動でbodyを組み立て
       const parts = [];
       for (const [date, time] of Object.entries(pageShifts)) {
-        parts.push(`sr[${date}]=${encodeURIComponent(time)}`);
+        const encodedTime = time.replace(/ /g, '+');
+        parts.push(`sr[${date}]=${encodedTime}`);
       }
       const bodyStr = parts.join('&');
 
