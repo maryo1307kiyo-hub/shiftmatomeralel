@@ -79,15 +79,15 @@ export default async function handler(req, res) {
       const actionUrl = `${baseHost}/shift/bulk_edit?p=${pageNum}&s=${sParam}`;
 
       // bodyにはsr[]だけ（sとpはURLに含まれてるので不要）
-      const fd = new URLSearchParams();
+      // ブラケットをエンコードしないよう手動でbodyを組み立て
+      const parts = [];
       for (const [date, time] of Object.entries(pageShifts)) {
-        fd.append(`sr[${date}]`, time);
+        parts.push(`sr[${date}]=${encodeURIComponent(time)}`);
       }
-      // submitボタンの値も送る（ciftrが必要としてる可能性）
-      fd.append('commit', '申請する');
+      const bodyStr = parts.join('&');
 
       console.log(`p=${pageNum} POST to:`, actionUrl);
-      console.log(`p=${pageNum} body:`, fd.toString());
+      console.log(`p=${pageNum} body:`, bodyStr);
 
       const postRes = await fetch(actionUrl, {
         method: 'POST',
@@ -99,7 +99,7 @@ export default async function handler(req, res) {
           'Origin': baseHost,
           'Referer': `${baseHost}/shift/bulk_edit?s=${sParam}`,
         },
-        body: fd.toString(),
+        body: bodyStr,
         redirect: 'follow'
       });
 
