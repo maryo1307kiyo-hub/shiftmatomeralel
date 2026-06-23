@@ -83,6 +83,8 @@ export default async function handler(req, res) {
       for (const [date, time] of Object.entries(pageShifts)) {
         fd.append(`sr[${date}]`, time);
       }
+      // submitボタンの値も送る（ciftrが必要としてる可能性）
+      fd.append('commit', '申請する');
 
       console.log(`p=${pageNum} POST to:`, actionUrl);
       console.log(`p=${pageNum} body:`, fd.toString());
