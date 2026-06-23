@@ -1660,6 +1660,15 @@ function openApplyMenu() {
   ).join('');
 }
 
+function showApplyScreen(id) {
+  ['applyMemberSelect'].forEach(s => {
+    const el = document.getElementById(s);
+    if(el) el.style.display = 'none';
+  });
+  const target = document.getElementById(id);
+  if(target) target.style.display = 'flex';
+}
+
 function openApply(url, name) {
   const sParam = url.match(/[?&]s=([^&]+)/)?.[1];
   if (!sParam) { showToast('URLからsパラメータを取得できません'); return; }
