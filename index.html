@@ -1696,19 +1696,10 @@ function openApplyMenu() {
 }
 
 function openApply(url, name) {
-  applyState = { url, name, dates: [] };
-  document.getElementById('applyTitle').textContent = name + ' のシフト申請';
-  document.getElementById('applyOverlay').classList.remove('hidden');
-
-  // sパラメータを取得してbulk_editのURLを構築
   const sParam = url.match(/[?&]s=([^&]+)/)?.[1];
   if (!sParam) { showToast('URLからsパラメータを取得できません'); return; }
-
-  const iframeUrl = `http://m.s1.ciftr.jp/shift/bulk_edit?s=${sParam}`;
-  const iframe = document.getElementById('applyIframe');
-  iframe.src = iframeUrl;
-  iframe.style.display = 'block';
-  document.getElementById('applyMemberSelect').style.display = 'none';
+  closeApply();
+  window.open(`http://m.s1.ciftr.jp/shift/bulk_edit?s=${sParam}`, '_blank');
 }
 
 async function checkPasswordExists(name) {
