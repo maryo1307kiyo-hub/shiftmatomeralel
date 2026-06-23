@@ -108,7 +108,10 @@ export default async function handler(req, res) {
         },
         body: fd.toString()
       });
-      return r.ok;
+      const responseText = await ciftrRes.text();
+      console.log(`p=${pageNum} status:`, ciftrRes.status);
+      console.log(`p=${pageNum} response:`, responseText.slice(0, 200));
+      return ciftrRes.ok;
     };
 
     try {
