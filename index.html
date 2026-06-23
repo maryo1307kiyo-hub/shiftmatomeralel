@@ -1826,34 +1826,62 @@ function clearTimeRow(dateStr) {
 }
 
 async function submitApply() {
-  const shifts = {};
+  const sParam = applyState.url.match(/[?&]s=([^&]+)/)?.[1];
+  if (!sParam) { showToast('URLからsパラメータを取得できません'); return; }
+
+  const baseHost = applyState.url.includes('m.s1.ciftr.jp') ? 'http://m.s1.ciftr.jp' : 'https://m-s1.ciftr.jp';
+
+  // 入力値を日付ごとに収集（空欄は除外、p=1とp=2に分ける）
+  const page1 = {}, page2 = {};
   let hasAny = false;
   for (const dt of applyState.dates) {
     const dateStr = dt.toLocaleDateString('sv-SE').replace(/-/g,'');
     const val = (document.getElementById('tr_' + dateStr)?.value || '').trim();
-    if (val) {
-      // "1000 1800" or "1000+1800" → "1000 1800"
-      const normalized = val.replace(/[+\-\/]/, ' ').replace(/\s+/, ' ');
-      shifts[dateStr] = normalized;
-      hasAny = true;
-    } else {
-      shifts[dateStr] = '';
-    }
+    if (!val) continue;
+    const normalized = val.replace(/[+\/]/, ' ').replace(/\s+/, ' ');
+    const day = parseInt(dateStr.slice(6, 8));
+    if (day >= 16) { page1[dateStr] = normalized; }
+    else { page2[dateStr] = normalized; }
+    hasAny = true;
   }
 
   if (!hasAny) { showToast('申請する日程を入力してください'); return; }
 
-  try {
-    const r = await fetch('/api/submit-shift?action=submit', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ groupId, name: applyState.name, password: applyState.password, url: applyState.url, shifts })
-    });
-    const d = await r.json();
-    if (d.error) { showToast(d.error); return; }
-    skipNextBgRefresh = true;
-    showToast('申請しました！次回更新時に反映されます');
-    closeApply();
-  } catch(e) { showToast('申請に失敗しました'); }
+  // ブラウザから直接ciftrにフォームをsubmitする
+  const submitPage = (pageNum, pageShifts) => {
+    if (Object.keys(pageShifts).length === 0) return;
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = `${baseHost}/shift/bulk_edit?p=${pageNum}&s=${sParam}`;
+    form.target = '_blank'; // 新しいタブで開く
+
+    const sInput = document.createElement('input');
+    sInput.type = 'hidden';
+    sInput.name = 's';
+    sInput.value = sParam;
+    form.appendChild(sInput);
+
+    for (const [date, time] of Object.entries(pageShifts)) {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = `sr[${date}]`;
+      input.value = time;
+      form.appendChild(input);
+    }
+
+    document.body.appendChild(form);
+    form.submit();
+    document.body.removeChild(form);
+  };
+
+  submitPage(1, page1);
+  if (Object.keys(page2).length > 0) {
+    setTimeout(() => submitPage(2, page2), 500);
+  }
+
+  skipNextBgRefresh = true;
+  showToast('ciftrに送信しました！');
+  closeApply();
 }
 
 function closeApply() {
