@@ -25,7 +25,6 @@ export default async function handler(req, res) {
     });
   }
 
-  // パスワード設定
   if (req.method === 'POST' && req.query.action === 'set-password') {
     const { groupId, name, password } = req.body;
     if (!groupId || !name || !password) return res.status(400).json({ error: 'missing fields' });
@@ -36,7 +35,6 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true });
   }
 
-  // パスワード確認
   if (req.method === 'POST' && req.query.action === 'verify-password') {
     const { groupId, name, password } = req.body;
     if (!groupId || !name || !password) return res.status(400).json({ error: 'missing fields' });
@@ -46,14 +44,12 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true });
   }
 
-  // シフト申請送信
   if (req.method === 'POST' && req.query.action === 'submit') {
     const { groupId, name, password, url, shifts } = req.body;
     if (!groupId || !name || !password || !url || !shifts) {
       return res.status(400).json({ error: 'missing fields' });
     }
 
-    // パスワード確認
     const stored = await redisGet(`shift-pw:${groupId}:${name}`);
     if (!stored || stored.password !== password) {
       return res.status(401).json({ error: 'パスワードが違います' });
@@ -64,7 +60,6 @@ export default async function handler(req, res) {
 
     const baseHost = 'http://m.s1.ciftr.jp';
 
-    // 日付をp=1（16〜末日）とp=2（1〜15日）に分ける
     const page1 = {}, page2 = {};
     for (const [date, time] of Object.entries(shifts)) {
       if (!time || !time.trim()) continue;
@@ -80,51 +75,37 @@ export default async function handler(req, res) {
     const sendPage = async (pageNum, pageShifts) => {
       if (Object.keys(pageShifts).length === 0) return { ok: true };
 
-      // Step1: GETでページを開いてCookieを取得
-      const getUrl = `${baseHost}/shift/bulk_edit?p=${pageNum}&s=${sParam}`;
-      const getRes = await fetch(getUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          'Accept-Language': 'ja-JP,ja;q=0.9',
-        },
-        redirect: 'follow'
-      });
+      // フォームのactionと同じURL形式: /shift/bulk_edit?p=1&s=xxx
+      const actionUrl = `${baseHost}/shift/bulk_edit?p=${pageNum}&s=${sParam}`;
 
-      // CookieをSet-Cookieヘッダーから取得
-      const setCookie = getRes.headers.get('set-cookie') || '';
-      const cookie = setCookie.split(';')[0];
-      console.log(`p=${pageNum} GET status:`, getRes.status, 'cookie:', cookie);
-
-      // Step2: 取得したCookieを付けてPOST
+      // bodyにはsr[]だけ（sとpはURLに含まれてるので不要）
       const fd = new URLSearchParams();
-      fd.append('s', sParam);
       for (const [date, time] of Object.entries(pageShifts)) {
         fd.append(`sr[${date}]`, time);
       }
 
-      const postHeaders = {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'ja-JP,ja;q=0.9',
-        'Origin': baseHost,
-        'Referer': getUrl,
-      };
-      if (cookie) postHeaders['Cookie'] = cookie;
+      console.log(`p=${pageNum} POST to:`, actionUrl);
+      console.log(`p=${pageNum} body:`, fd.toString());
 
-      const postRes = await fetch(`${baseHost}/shift/bulk_edit?p=${pageNum}&s=${sParam}`, {
+      const postRes = await fetch(actionUrl, {
         method: 'POST',
-        headers: postHeaders,
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'ja-JP,ja;q=0.9',
+          'Origin': baseHost,
+          'Referer': `${baseHost}/shift/bulk_edit?s=${sParam}`,
+        },
         body: fd.toString(),
         redirect: 'follow'
       });
 
       const responseText = await postRes.text();
-      console.log(`p=${pageNum} POST status:`, postRes.status);
-      console.log(`p=${pageNum} response:`, responseText.slice(0, 300));
+      console.log(`p=${pageNum} status:`, postRes.status);
+      console.log(`p=${pageNum} response:`, responseText.slice(0, 400));
 
-      return { ok: postRes.ok, status: postRes.status, body: responseText.slice(0, 300) };
+      return { ok: postRes.ok, status: postRes.status };
     };
 
     try {
@@ -132,7 +113,7 @@ export default async function handler(req, res) {
       const r2 = await sendPage(2, page2);
       return res.status(200).json({ ok: true, r1, r2 });
     } catch(e) {
-      console.error('submit error:', e.message);
+      console.error('error:', e.message);
       return res.status(500).json({ error: e.message });
     }
   }
