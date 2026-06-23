@@ -73,37 +73,50 @@ export default async function handler(req, res) {
     const bulkEditUrl = `${baseHost}/shift/bulk_edit?s=${sParam}`;
 
     // shiftsは { "20260718": "1030+1900", "20260720": "" } 形式
-    const formData = new URLSearchParams();
-    formData.append('p', '1');
-    formData.append('s', sParam);
-    let hasAny = false;
+    // 日付によってp=1（16〜末日）とp=2（1〜15日）に分けて送信
+    const page1Shifts = {};
+    const page2Shifts = {};
     for (const [date, time] of Object.entries(shifts)) {
-      if (time && time.trim()) {
-        formData.append(`sr[${date}]`, time.trim());
-        hasAny = true;
+      if (!time || !time.trim()) continue;
+      const day = parseInt(date.slice(6, 8));
+      if (day >= 16) {
+        page1Shifts[date] = time.trim();
+      } else {
+        page2Shifts[date] = time.trim();
       }
     }
-    if (!hasAny) return res.status(400).json({ error: '申請する日程がありません' });
 
-    const bodyStr = formData.toString();
-    console.log('POST body:', bodyStr);
+    if (Object.keys(page1Shifts).length === 0 && Object.keys(page2Shifts).length === 0) {
+      return res.status(400).json({ error: '申請する日程がありません' });
+    }
 
-    try {
-      const ciftrRes = await fetch(`${baseHost}/shift/bulk_edit`, {
+    const sendPage = async (pageNum, pageShifts) => {
+      if (Object.keys(pageShifts).length === 0) return true;
+      const fd = new URLSearchParams();
+      fd.append('s', sParam);
+      for (const [date, time] of Object.entries(pageShifts)) {
+        fd.append(`sr[${date}]`, time);
+      }
+      console.log(`POST p=${pageNum}:`, fd.toString());
+      const r = await fetch(`${baseHost}/shift/bulk_edit?p=${pageNum}&s=${sParam}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
           'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15',
           'Origin': baseHost,
-          'Referer': bulkEditUrl,
+          'Referer': `${baseHost}/shift/bulk_edit?s=${sParam}`,
         },
-        body: bodyStr
+        body: fd.toString()
       });
+      return r.ok;
+    };
 
-      if (!ciftrRes.ok) {
-        return res.status(500).json({ error: `ciftr返答: ${ciftrRes.status}` });
+    try {
+      const r1 = await sendPage(1, page1Shifts);
+      const r2 = await sendPage(2, page2Shifts);
+      if (!r1 || !r2) {
+        return res.status(500).json({ error: 'ciftrへの送信に失敗しました' });
       }
-
       return res.status(200).json({ ok: true });
     } catch(e) {
       return res.status(500).json({ error: e.message });
