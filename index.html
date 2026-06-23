@@ -1730,9 +1730,11 @@ async function checkPasswordExists(name) {
 
 function showApplyScreen(id) {
   ['applyMemberSelect','applySetPassword','applyLoginPassword','applyInputArea'].forEach(s => {
-    document.getElementById(s).style.display = 'none';
+    const el = document.getElementById(s);
+    if(el) el.style.display = 'none';
   });
-  document.getElementById(id).style.display = 'flex';
+  const target = document.getElementById(id);
+  if(target) target.style.display = 'flex';
 }
 
 async function submitSetPassword() {
