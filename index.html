@@ -1844,21 +1844,32 @@ async function submitApply() {
 
   if (!hasAny) { showToast('申請する日程を入力してください'); return; }
 
-  const shifts = {...page1, ...page2};
+  const submitPage = (pageNum, pageShifts) => {
+    if (Object.keys(pageShifts).length === 0) return;
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = `http://m.s1.ciftr.jp/shift/bulk_edit?p=${pageNum}&s=${sParam}`;
+    form.target = '_blank';
+    for (const [date, time] of Object.entries(pageShifts)) {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = `sr[${date}]`;
+      input.value = time;
+      form.appendChild(input);
+    }
+    document.body.appendChild(form);
+    form.submit();
+    document.body.removeChild(form);
+  };
 
-  try {
-    const r = await fetch('/api/submit-shift?action=submit', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ groupId, name: applyState.name, password: applyState.password, url: applyState.url, shifts })
-    });
-    const d = await r.json();
-    if (d.error) { showToast(d.error); return; }
-    skipNextBgRefresh = true;
-    showToast('申請しました！次回更新時に反映されます');
-    closeApply();
-    // シフトタブに戻る
-    document.querySelectorAll('.tab')[0].click();
-  } catch(e) { showToast('申請に失敗しました'); }
+  submitPage(1, page1);
+  if (Object.keys(page2).length > 0) setTimeout(() => submitPage(2, page2), 500);
+
+  skipNextBgRefresh = true;
+  closeApply();
+  // シフトタブに戻る
+  document.querySelectorAll('.tab')[0].click();
+  showToast('申請しました！タブを閉じてまとめれーるに戻ってください');
 }
 
 function closeApply() {
