@@ -76,9 +76,14 @@ export default async function handler(req, res) {
     const formData = new URLSearchParams();
     formData.append('p', '1');
     formData.append('s', sParam);
+    let hasAny = false;
     for (const [date, time] of Object.entries(shifts)) {
-      formData.append(`sr[${date}]`, time);
+      if (time && time.trim()) {
+        formData.append(`sr[${date}]`, time.trim());
+        hasAny = true;
+      }
     }
+    if (!hasAny) return res.status(400).json({ error: '申請する日程がありません' });
 
     const bodyStr = formData.toString();
     console.log('POST body:', bodyStr);
