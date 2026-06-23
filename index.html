@@ -1856,6 +1856,8 @@ async function submitApply() {
     skipNextBgRefresh = true;
     showToast('申請しました！次回更新時に反映されます');
     closeApply();
+    // シフトタブに戻る
+    document.querySelectorAll('.tab')[0].click();
   } catch(e) { showToast('申請に失敗しました'); }
 }
 
