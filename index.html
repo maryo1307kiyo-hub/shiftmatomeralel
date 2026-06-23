@@ -333,42 +333,18 @@
   <span id="lastUpdated"></span>
 </div>
 
-<!-- シフト申請モーダル -->
+<!-- シフト申請モーダル（iframe埋め込み） -->
 <div class="apply-overlay hidden" id="applyOverlay" onclick="closeApplyOutside(event)">
-  <div class="apply-sheet" id="applySheet">
-    <div class="apply-header">
+  <div class="apply-sheet" id="applySheet" style="height:90vh;padding:0;">
+    <div class="apply-header" style="padding:8px 14px;">
       <span class="apply-title" id="applyTitle">シフト申請</span>
       <button class="btn-px btn-red btn-sm" onclick="closeApply()">✕</button>
     </div>
-
-    <!-- メンバー選択画面 -->
-    <div id="applyMemberSelect" style="display:none;flex-direction:column;gap:10px;">
+    <div id="applyMemberSelect" style="display:none;flex-direction:column;gap:10px;padding:16px;">
       <div style="font-size:12px;color:var(--muted);">申請するメンバーを選択してください</div>
       <div id="applyMemberList" style="display:flex;flex-direction:column;gap:6px;"></div>
     </div>
-
-    <!-- パスワード設定画面 -->
-    <div id="applySetPassword" style="display:none;flex-direction:column;gap:10px;">
-      <div style="font-size:12px;color:var(--muted);">初回設定：このニックネーム専用のパスワードを設定してください</div>
-      <div style="font-size:11px;color:var(--muted);">パスワード（4文字以上）</div>
-      <input type="password" id="applyNewPw" placeholder="パスワードを設定" autocomplete="new-password">
-      <input type="password" id="applyNewPw2" placeholder="確認入力" autocomplete="new-password">
-      <button class="btn-px btn-primary" style="background:var(--accent3);" onclick="submitSetPassword()">設定する</button>
-    </div>
-
-    <!-- パスワード入力画面 -->
-    <div id="applyLoginPassword" style="display:none;flex-direction:column;gap:10px;">
-      <div style="font-size:12px;color:var(--muted);" id="applyLoginMsg">パスワードを入力してください</div>
-      <input type="password" id="applyPw" placeholder="パスワード" autocomplete="current-password">
-      <button class="btn-px btn-primary" style="background:var(--accent3);" onclick="submitVerifyPassword()">確認</button>
-    </div>
-
-    <!-- 申請入力画面 -->
-    <div id="applyInputArea" style="display:none;flex-direction:column;gap:8px;">
-      <div style="font-size:12px;color:var(--muted);">申請する時間を入力してください（例: 1000 1800）空欄は申請なし</div>
-      <div id="applyDateList"></div>
-      <button class="btn-px btn-primary" style="background:var(--accent3);" onclick="submitApply()">申請する ▶</button>
-    </div>
+    <iframe id="applyIframe" style="display:none;width:100%;flex:1;border:none;background:#fff;" src="about:blank"></iframe>
   </div>
 </div>
 
@@ -1720,15 +1696,19 @@ function openApplyMenu() {
 }
 
 function openApply(url, name) {
-  applyState = { url, name, dates: getApplicableDates() };
+  applyState = { url, name, dates: [] };
   document.getElementById('applyTitle').textContent = name + ' のシフト申請';
-  const savedPw = localStorage.getItem('applyPw_' + groupId + '_' + name);
-  if (savedPw) {
-    applyState.password = savedPw;
-    showApplyInput();
-  } else {
-    checkPasswordExists(name);
-  }
+  document.getElementById('applyOverlay').classList.remove('hidden');
+
+  // sパラメータを取得してbulk_editのURLを構築
+  const sParam = url.match(/[?&]s=([^&]+)/)?.[1];
+  if (!sParam) { showToast('URLからsパラメータを取得できません'); return; }
+
+  const iframeUrl = `http://m.s1.ciftr.jp/shift/bulk_edit?s=${sParam}`;
+  const iframe = document.getElementById('applyIframe');
+  iframe.src = iframeUrl;
+  iframe.style.display = 'block';
+  document.getElementById('applyMemberSelect').style.display = 'none';
 }
 
 async function checkPasswordExists(name) {
@@ -1874,9 +1854,9 @@ async function submitApply() {
 
 function closeApply() {
   document.getElementById('applyOverlay').classList.add('hidden');
-  document.getElementById('applyNewPw').value = '';
-  document.getElementById('applyNewPw2').value = '';
-  document.getElementById('applyPw').value = '';
+  const iframe = document.getElementById('applyIframe');
+  iframe.src = 'about:blank';
+  iframe.style.display = 'none';
 }
 
 function closeApplyOutside(e) {
