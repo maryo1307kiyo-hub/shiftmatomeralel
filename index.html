@@ -1667,68 +1667,66 @@ function openApply(url, name) {
   const pwKey = 'applyPw_' + groupId + '_' + name;
   const savedPw = localStorage.getItem(pwKey);
 
+  // このスマホで別の人のパスワードが設定されてるか確認
+  const myName = getMyApplyName();
+  if (myName && myName !== name) {
+    // 他人の名前を押した
+    showToast(`このシフターは ${myName} さん専用です`);
+    return;
+  }
+
   if (!savedPw) {
     // 初回：パスワード設定
-    showApplyAuth(name, url, sParam, 'set');
+    showApplyAuth(name, sParam);
   } else {
-    // 2回目以降：パスワード入力
-    showApplyAuth(name, url, sParam, 'verify', savedPw);
+    // 2回目以降：そのまま開く
+    closeApply();
+    window.open(`http://m.s1.ciftr.jp/shift/bulk_edit?s=${sParam}`, '_blank');
   }
 }
 
-function showApplyAuth(name, url, sParam, mode, savedPw) {
-  // 既存のダイアログを削除
+function getMyApplyName() {
+  // このスマホで設定済みの名前を探す
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && key.startsWith('applyPw_' + groupId + '_')) {
+      return key.replace('applyPw_' + groupId + '_', '');
+    }
+  }
+  return null;
+}
+
+function showApplyAuth(name, sParam) {
   const old = document.getElementById('applyAuthDialog');
   if (old) old.remove();
 
   const dialog = document.createElement('div');
   dialog.id = 'applyAuthDialog';
   dialog.style.cssText = 'position:fixed;inset:0;background:#00000099;z-index:600;display:flex;align-items:flex-end;';
-
-  if (mode === 'set') {
-    dialog.innerHTML = `
-      <div style="background:var(--bg);border-top:2px solid var(--accent3);width:100%;padding:16px;display:flex;flex-direction:column;gap:12px;">
-        <div style="font-family:'Press Start 2P',monospace;font-size:8px;color:var(--accent3);">${esc(name)} のパスワード設定</div>
-        <div style="font-size:12px;color:var(--muted);">初回のみ：自分だけのパスワードを設定してください</div>
-        <input type="password" id="authPw1" placeholder="パスワード（4文字以上）" style="background:#080814;border:2px solid var(--muted);color:var(--text);font-family:inherit;font-size:14px;padding:8px;width:100%;outline:none;">
-        <input type="password" id="authPw2" placeholder="確認入力" style="background:#080814;border:2px solid var(--muted);color:var(--text);font-family:inherit;font-size:14px;padding:8px;width:100%;outline:none;">
-        <button class="btn-px btn-primary" style="background:var(--accent3);" onclick="confirmApplyAuth('${esc(name)}','${sParam}','set')">設定してシフターを開く ▶</button>
-        <button class="btn-px btn-ghost btn-sm" onclick="document.getElementById('applyAuthDialog').remove()">キャンセル</button>
-      </div>`;
-  } else {
-    dialog.innerHTML = `
-      <div style="background:var(--bg);border-top:2px solid var(--accent3);width:100%;padding:16px;display:flex;flex-direction:column;gap:12px;">
-        <div style="font-family:'Press Start 2P',monospace;font-size:8px;color:var(--accent3);">${esc(name)} のシフト申請</div>
-        <div style="font-size:12px;color:var(--muted);">パスワードを入力してシフターを開きます</div>
-        <input type="password" id="authPw1" placeholder="パスワード" style="background:#080814;border:2px solid var(--muted);color:var(--text);font-family:inherit;font-size:14px;padding:8px;width:100%;outline:none;">
-        <button class="btn-px btn-primary" style="background:var(--accent3);" onclick="confirmApplyAuth('${esc(name)}','${sParam}','verify','${savedPw}')">シフターを開く ▶</button>
-        <button class="btn-px btn-ghost btn-sm" onclick="document.getElementById('applyAuthDialog').remove()">キャンセル</button>
-      </div>`;
-  }
-
+  dialog.innerHTML = `
+    <div style="background:var(--bg);border-top:2px solid var(--accent3);width:100%;padding:16px;display:flex;flex-direction:column;gap:12px;">
+      <div style="font-family:'Press Start 2P',monospace;font-size:8px;color:var(--accent3);">${esc(name)} のパスワード設定</div>
+      <div style="font-size:12px;color:var(--muted);">初回のみ：自分だけのパスワードを設定してください（次回から不要）</div>
+      <input type="password" id="authPw1" placeholder="パスワード（4文字以上）" style="background:#080814;border:2px solid var(--muted);color:var(--text);font-family:inherit;font-size:14px;padding:8px;width:100%;outline:none;">
+      <input type="password" id="authPw2" placeholder="確認入力" style="background:#080814;border:2px solid var(--muted);color:var(--text);font-family:inherit;font-size:14px;padding:8px;width:100%;outline:none;">
+      <button class="btn-px btn-primary" style="background:var(--accent3);" onclick="confirmApplyAuth('${esc(name)}','${sParam}')">設定してシフターを開く ▶</button>
+      <button class="btn-px btn-ghost btn-sm" onclick="document.getElementById('applyAuthDialog').remove()">キャンセル</button>
+    </div>`;
   document.body.appendChild(dialog);
   setTimeout(() => document.getElementById('authPw1')?.focus(), 100);
 }
 
-function confirmApplyAuth(name, sParam, mode, savedPw) {
+function confirmApplyAuth(name, sParam) {
   const pw1 = document.getElementById('authPw1')?.value || '';
   const pw2 = document.getElementById('authPw2')?.value || '';
+  if (pw1.length < 4) { showToast('4文字以上で設定してください'); return; }
+  if (pw1 !== pw2) { showToast('パスワードが一致しません'); return; }
   const pwKey = 'applyPw_' + groupId + '_' + name;
-
-  if (mode === 'set') {
-    if (pw1.length < 4) { showToast('4文字以上で設定してください'); return; }
-    if (pw1 !== pw2) { showToast('パスワードが一致しません'); return; }
-    localStorage.setItem(pwKey, pw1);
-    document.getElementById('applyAuthDialog').remove();
-    closeApply();
-    window.open(`http://m.s1.ciftr.jp/shift/bulk_edit?s=${sParam}`, '_blank');
-    showToast('パスワードを設定しました。シフターで申請してください');
-  } else {
-    if (pw1 !== savedPw) { showToast('パスワードが違います'); return; }
-    document.getElementById('applyAuthDialog').remove();
-    closeApply();
-    window.open(`http://m.s1.ciftr.jp/shift/bulk_edit?s=${sParam}`, '_blank');
-  }
+  localStorage.setItem(pwKey, pw1);
+  document.getElementById('applyAuthDialog').remove();
+  closeApply();
+  window.open(`http://m.s1.ciftr.jp/shift/bulk_edit?s=${sParam}`, '_blank');
+  showToast('設定しました！次回からパスワード不要です');
 }
 
 
