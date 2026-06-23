@@ -35,6 +35,22 @@ export default async function handler(req, res) {
     });
   }
 
+  // GET: リセットフラグ確認（各自のスマホから呼ばれる）
+  if (req.method === 'GET' && req.query.action === 'check-reset') {
+    const { groupId, name } = req.query;
+    if (!groupId || !name) return res.status(400).json({ error: 'missing fields' });
+    const flag = await redisGet(`apply-reset:${groupId}:${name}`);
+    return res.status(200).json({ reset: !!flag });
+  }
+
+  // GET: リセットフラグを消す（初回設定完了後に呼ばれる）
+  if (req.method === 'GET' && req.query.action === 'clear-reset') {
+    const { groupId, name } = req.query;
+    if (!groupId || !name) return res.status(400).json({ error: 'missing fields' });
+    await redisDel(`apply-reset:${groupId}:${name}`);
+    return res.status(200).json({ ok: true });
+  }
+
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const { action, adminPassword, groupId, name, newPassword } = req.body;
@@ -44,18 +60,11 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: '管理者パスワードが違います' });
   }
 
-  // パスワードリセット（削除）
+  // パスワードリセット
   if (action === 'reset') {
     if (!groupId || !name) return res.status(400).json({ error: 'missing fields' });
-    await redisDel(`shift-pw:${groupId}:${name}`);
-    return res.status(200).json({ ok: true });
-  }
-
-  // パスワード強制変更
-  if (action === 'set') {
-    if (!groupId || !name || !newPassword) return res.status(400).json({ error: 'missing fields' });
-    if (newPassword.length < 4) return res.status(400).json({ error: '4文字以上で設定してください' });
-    await redisSet(`shift-pw:${groupId}:${name}`, { password: newPassword });
+    // リセットフラグを立てる（各自のスマホが次回ログイン時に検知して初回設定に戻す）
+    await redisSet(`apply-reset:${groupId}:${name}`, { resetAt: new Date().toISOString() });
     return res.status(200).json({ ok: true });
   }
 
