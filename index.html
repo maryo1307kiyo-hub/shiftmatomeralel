@@ -863,7 +863,7 @@ function renderShifts(results){
       const pillStyle=isHex?`border-color:${memberColor}33;background:${memberColor}11`:'';
       const nameClass=isHex?'':memberColor;
       if(s.rejected){
-        return `<div class="shift-pill pill-rejected"><span class="pill-label pill-label-rejected">👻</span><span class="pill-name" style="${nameStyle}">${esc(s.name)}</span><span class="pill-time pill-time-rejected">シフト申請失敗</span></div>`;
+        return `<div class="shift-pill pill-rejected"><span class="pill-label pill-label-rejected">👻</span><span class="pill-name" style="${nameStyle}">${esc(s.name)}</span></div>`;
       }
       if(s.pending){
         return `<div class="shift-pill pill-pending" style="${pillStyle}"><span class="pill-label">申</span><span class="pill-name" style="${nameStyle}">${esc(s.name)}</span><span class="pill-time">${esc(s.start)}–${esc(s.end)}</span></div>`;
