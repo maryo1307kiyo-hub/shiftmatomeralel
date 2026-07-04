@@ -31,16 +31,14 @@ export default async function handler(req, res) {
 
 function parseEvents(html) {
   const events = [];
-  // タグを除去してテキスト化
   const text = html
     .replace(/<[^>]+>/g, ' ')
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')
     .replace(/\s+/g, ' ');
 
-  // "2026.06.13  コンサート イベント名\n開場..." 形式
-  // 日付とジャンルはセットで出現する
-  const dateTypePattern = /(\d{4})\.(\d{2})\.(\d{2})\s+(コンサート|スポーツ|その他|展示|格闘技|プロレス|バスケットボール|バレーボール)\s+/g;
+  // "2026.07.04 コンサート イベント名 開場：..." 形式
+  const dateTypePattern = /(\d{4})\.(\d{2})\.(\d{2})\s+(コンサート|スポーツ|その他|展示|格闘技|プロレス|バスケットボール|バレーボール|ショー)\s+/g;
 
   let match;
   while ((match = dateTypePattern.exec(text)) !== null) {
@@ -49,9 +47,9 @@ function parseEvents(html) {
     const day = match[3];
     const type = match[4];
 
-    // ジャンルの直後から「開場」「開演」「次の日付」が来るまでをイベント名として取得
     const afterMatch = text.slice(match.index + match[0].length);
-    const nameMatch = afterMatch.match(/^([^\n]{2,60?)(?:\s+(?:開場|開演|終演|\d{4}\.))/);
+    // イベント名：次の「開場」「開演」「日付」まで（最大60文字）
+    const nameMatch = afterMatch.match(/^(.{2,60}?)(?:\s+(?:開場|開演|終演|\d{4}\.))/);
     if (!nameMatch) continue;
 
     const name = nameMatch[1].trim().slice(0, 40);
