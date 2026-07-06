@@ -68,31 +68,39 @@ export default async function handler(req, res) {
       const rejectedDates = new Set(rejectedShifts.map(s => s.date));
 
       // ===== 申請シフトのマージ処理 =====
-      // 考え方：
       // ・申請ページ(bulk_edit)は「今開いてる申請ウィンドウ」の日付しか含まない
       // ・締め切りが過ぎた（ウィンドウが閉じた）日付の申請は、確定/不採用が出るまでキャッシュでキープ
       // ・ウィンドウがまだ開いてる日付は、取得した申請ページが正 → ページに無ければ本人取り消しとして消す
-      const freshPending = pendingShifts; // 今回取得できた申請シフト（開いてるウィンドウ分）
-      const cached = prevPendingCache[member.name] || [];
-      const todayStr = jstToday();
+      // ※マージに失敗しても確定シフトの表示は絶対に守る（try/catchを分離）
+      try {
+        const freshPending = pendingShifts;
+        const rawCached = prevPendingCache[member.name];
+        const cached = (Array.isArray(rawCached) ? rawCached : []).filter(
+          s => s && typeof s.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s.date)
+        );
+        const todayStr = jstToday();
 
-      // 1) キャッシュのうち「ウィンドウが閉じた日付」だけ残す（過去日・確定済み・不採用は除去）
-      const keptFromCache = cached.filter(s =>
-        isWindowClosed(s.date) &&
-        s.date >= todayStr &&
-        !confirmedDates.has(s.date) &&
-        !rejectedDates.has(s.date)
-      );
+        // 1) キャッシュのうち「ウィンドウが閉じた日付」だけ残す（過去日・確定済み・不採用は除去）
+        const keptFromCache = cached.filter(s =>
+          isWindowClosed(s.date) &&
+          s.date >= todayStr &&
+          !confirmedDates.has(s.date) &&
+          !rejectedDates.has(s.date)
+        );
 
-      // 2) 今回取得分（開いてるウィンドウ）とマージ（日付重複はfresh優先）
-      const freshDates = new Set(freshPending.map(s => s.date));
-      const merged = [
-        ...freshPending,
-        ...keptFromCache.filter(s => !freshDates.has(s.date))
-      ];
+        // 2) 今回取得分（開いてるウィンドウ）とマージ（日付重複はfresh優先）
+        const freshDates = new Set(freshPending.map(s => s.date));
+        const merged = [
+          ...freshPending,
+          ...keptFromCache.filter(s => !freshDates.has(s.date))
+        ];
 
-      pendingShifts = merged;
-      prevPendingCache[member.name] = merged;
+        pendingShifts = merged;
+        prevPendingCache[member.name] = merged;
+      } catch(mergeErr) {
+        // マージ失敗時は今回取得分だけ使う（確定シフトには影響させない）
+        console.error('pending merge error:', member.name, mergeErr.message);
+      }
 
       return { name: member.name, colorIdx: idx, ...d, pendingShifts };
     } catch(e) {
@@ -120,7 +128,10 @@ function jstToday() {
 // ・16〜末日のシフト → 同月6日に申請ページが消える
 // ・1〜15日のシフト → 前月21日に申請ページが消える
 function isWindowClosed(dateStr) {
-  const [y, m, d] = dateStr.split('-').map(Number);
+  if (typeof dateStr !== 'string') return false;
+  const parts = dateStr.split('-').map(Number);
+  if (parts.length !== 3 || parts.some(isNaN)) return false;
+  const [y, m, d] = parts;
   const jst = new Date(Date.now() + 9 * 60 * 60 * 1000);
   const nowY = jst.getUTCFullYear();
   const nowM = jst.getUTCMonth() + 1;
