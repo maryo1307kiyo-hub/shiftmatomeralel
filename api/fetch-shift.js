@@ -4,7 +4,7 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const { url } = req.query;
+  const { url, debug } = req.query;
   if (!url) return res.status(400).json({ error: 'url required' });
   if (!url.includes('ciftr.jp')) return res.status(403).json({ error: 'ciftr.jp only' });
 
@@ -52,12 +52,21 @@ export default async function handler(req, res) {
       }
     }
 
-    return res.status(200).json({
+    const response = {
       shifts: confirmedShifts,
       pendingShifts: pendingOnly,
       rejectedShifts: rejectedOnly,
       year, month
-    });
+    };
+
+    // デバッグモード：Vercelが実際に受け取ったHTMLの先頭を返す
+    if (debug === '1') {
+      response.debugStatus = confirmedRes.status;
+      response.debugHtmlHead = confirmedHtml.slice(0, 1500);
+      response.debugHtmlLength = confirmedHtml.length;
+    }
+
+    return res.status(200).json(response);
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }
