@@ -29,11 +29,22 @@ export default async function handler(req, res) {
     });
   }
 
-  const { groupId, force } = req.query;
+  const { groupId, force, debug } = req.query;
   if (!groupId) return res.status(400).json({ error: 'groupId required' });
 
   const cacheKey = `shifts:${groupId}`;
   const pendingCacheKey = `pending:${groupId}`;
+
+  // デバッグ：Redisの生キャッシュを覗く（復元可否の判定用）
+  if (debug === 'keys') {
+    const shiftsCache = await redisGet(cacheKey);
+    const pendingCache = await redisGet(pendingCacheKey);
+    return res.status(200).json({
+      shiftsCache_cachedAt: shiftsCache?.cachedAt || null,
+      shiftsCache_hasData: shiftsCache?.results?.some(r => (r.shifts||[]).length > 0) || false,
+      pendingCache: pendingCache || null,
+    });
+  }
 
   // 強制更新でない場合はキャッシュを確認
   if (force !== '1') {
@@ -108,13 +119,31 @@ export default async function handler(req, res) {
     }
   }));
 
-  // 申請キャッシュを保存
-  await redisSet(pendingCacheKey, prevPendingCache);
-
   const now = new Date().toISOString();
   const data = { results, cachedAt: now, fromCache: false };
-  await redisSet(cacheKey, data);
 
+  // ===== 空データ上書きガード =====
+  // 取得結果が「異常」なら shifts: も pending: も上書きせず、前回の正常キャッシュを返す。
+  // 異常の定義：確定シフトを1件でも持つ人が0人（＝全員空 or 全員エラー）。
+  // ciftrが一時的にログイン期限切れHTMLを返しても、最後の正常データを表示し続けるための延命策。
+  const anyoneHasShifts = results.some(r => (r.shifts || []).length > 0);
+
+  if (!anyoneHasShifts) {
+    // 異常取得 → 前回の正常キャッシュがあればそれを返す（shifts:もpending:も上書きしない）
+    const prevCache = await redisGet(cacheKey);
+    const prevHadData = prevCache?.results?.some(r => (r.shifts || []).length > 0);
+    if (prevHadData) {
+      return res.status(200).json({ ...prevCache, fromCache: true, stale: true });
+    }
+    // 前回も正常データが無い場合のみ、今回の空データを保存（初回等）
+    await redisSet(pendingCacheKey, prevPendingCache);
+    await redisSet(cacheKey, data);
+    return res.status(200).json({ ...data, allEmpty: true });
+  }
+
+  // 正常取得 → キャッシュ保存
+  await redisSet(pendingCacheKey, prevPendingCache);
+  await redisSet(cacheKey, data);
   return res.status(200).json(data);
 }
 
