@@ -1762,12 +1762,11 @@ function showApplyScreen(id) {
 
 async function openApply(url, name) {
   // 申請ページのURLを決定：
-  // ・?s=xxx 形式 → 登録URLと同じホストの bulk_edit（まとめて申請）へ直行
+  // ・?s=xxx 形式 → bulk_edit（まとめて申請）を直接開く
   // ・パス型（/staff/login/...）→ 登録URLをそのまま開く（ciftrトップの「まとめて申請」から進んでもらう）
   const sParam = url.match(/[?&]s=([^&]+)/)?.[1];
-  const origin = url.match(/^https?:\/\/[^\/]+/)?.[0] || 'https://m-s1.ciftr.jp';
   const applyTarget = sParam
-    ? `${origin}/shift/bulk_edit?s=${sParam}`
+    ? `http://m.s1.ciftr.jp/shift/bulk_edit?s=${sParam}`
     : url;
 
   const pwKey = 'applyPw_' + groupId + '_' + name;
