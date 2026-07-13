@@ -46,6 +46,16 @@ export default async function handler(req, res) {
     });
   }
 
+  // ===== SWRモード：キャッシュを鮮度無視で即返す（初回表示用） =====
+  // キャッシュが無い場合のみ下の通常フローに落ちて実取得する
+  if (req.query.mode === 'cache') {
+    const cached = await redisGet(cacheKey);
+    if (cached) {
+      return res.status(200).json({ ...cached, fromCache: true });
+    }
+    // キャッシュ無し→通常取得へフォールスルー
+  }
+
   // 強制更新でない場合はキャッシュを確認
   if (force !== '1') {
     const cached = await redisGet(cacheKey);
