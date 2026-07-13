@@ -64,6 +64,21 @@ export default async function handler(req, res) {
       await redisSet(key, members);
       return res.status(200).json({ members });
     }
+
+    if (action === 'updateUrl') {
+      const { oldUrl, newUrl } = body;
+      if (!oldUrl || !newUrl) return res.status(400).json({ error: 'oldUrl and newUrl required' });
+      if (!newUrl.includes('ciftr.jp')) return res.status(403).json({ error: 'ciftr.jp only' });
+      // 新URLが別メンバーで既に使われていないかチェック
+      if (members.some(m => m.url === newUrl && m.url !== oldUrl)) {
+        return res.status(409).json({ error: 'already exists' });
+      }
+      const target = members.find(m => m.url === oldUrl);
+      if (!target) return res.status(404).json({ error: 'member not found' });
+      members = members.map(m => m.url === oldUrl ? { ...m, url: newUrl } : m);
+      await redisSet(key, members);
+      return res.status(200).json({ members, oldUrl, newUrl, name: target.name });
+    }
   }
 
   return res.status(405).json({ error: 'Method not allowed' });
