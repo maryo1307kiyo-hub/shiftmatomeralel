@@ -581,9 +581,7 @@ async function enterGroup(id){
   await loadMembers();
   loadRanking(id);
   if(members.length>0){
-    fetchAll();
-    // 初回表示後にバックグラウンドで差分チェック
-    setTimeout(bgRefresh, 3000);
+    fetchAll(); // SWR: キャッシュ即表示 → 裏で最新確認まで自動
   }
   else setStatus('メンバーを登録してください');
 }
@@ -708,11 +706,48 @@ function showTodayEvent(evMap){
 }
 
 // ===== シフト取得 =====
+// force=true（更新ボタン）: ローディング画面を出してciftrから確実に再取得
+// force=false（起動時）  : キャッシュを即表示 → 裏で最新を取得して差し替え（SWR）
 async function fetchAll(force=false){
   if(!members.length){ showToast('先にメンバーを設定してください'); return; }
   document.getElementById('fetchBtn').disabled=true;
 
-  // ローディング表示（ドットキャラ＋メッセージ）
+  if(!force){
+    // ===== SWR: キャッシュ即表示 =====
+    try{
+      const r=await fetch(`/api/get-shifts?groupId=${encodeURIComponent(groupId)}&mode=cache`);
+      if(!r.ok) throw new Error(`HTTP ${r.status}`);
+      const d=await r.json();
+      if(d.error) throw new Error(d.error);
+
+      document.getElementById('fetchBtn').disabled=false;
+      lastResults=d.results||[];
+      renderShifts(d.results||[]);
+      lastShiftData=JSON.stringify((d.results||[]).map(r=>({name:r.name,shifts:r.shifts,pendingShifts:r.pendingShifts,rejectedShifts:r.rejectedShifts})));
+      loadEvents(d.results||[]);
+
+      const t=d.cachedAt?new Date(d.cachedAt):new Date();
+      document.getElementById('lastUpdated').textContent=`${t.getMonth()+1}/${t.getDate()} ${t.getHours()}:${String(t.getMinutes()).padStart(2,'0')} 更新`;
+
+      if(d.fromCache){
+        // キャッシュ表示完了 → 即座に裏で最新確認
+        bgRefresh();
+      } else {
+        // キャッシュが無く実取得された（初回など）→ 裏取得は不要
+        lastBgRefreshAt = Date.now();
+        const ok=(d.results||[]).filter(r=>!r.error).length;
+        setStatus(`✓ ${ok}/${(d.results||[]).length}人 取得完了`);
+      }
+      return;
+    }catch(e){
+      document.getElementById('fetchBtn').disabled=false;
+      document.getElementById('shiftContent').innerHTML='<div class="empty-state">取得に失敗しました</div>';
+      setStatus('ERROR');
+      return;
+    }
+  }
+
+  // ===== force: 従来のフル取得（ローディング画面あり） =====
   let msgIdx=0;
   document.getElementById('shiftContent').innerHTML=`
     <div class="loading">
@@ -732,7 +767,7 @@ async function fetchAll(force=false){
   document.querySelectorAll('.tab')[0].click();
 
   try{
-    const url=`/api/get-shifts?groupId=${encodeURIComponent(groupId)}${force?'&force=1':''}`;
+    const url=`/api/get-shifts?groupId=${encodeURIComponent(groupId)}&force=1`;
     const r=await fetch(url);
     if(!r.ok) throw new Error(`HTTP ${r.status}`);
     const d=await r.json();
@@ -743,14 +778,15 @@ async function fetchAll(force=false){
     lastResults=d.results||[];
     renderShifts(d.results||[]);
     lastShiftData=JSON.stringify((d.results||[]).map(r=>({name:r.name,shifts:r.shifts,pendingShifts:r.pendingShifts,rejectedShifts:r.rejectedShifts})));
+    lastBgRefreshAt = Date.now();
 
     // イベント情報は完全に分離して非同期取得（失敗してもシフト表示に影響しない）
     loadEvents(d.results||[]);
 
     const ok=(d.results||[]).filter(r=>!r.error).length;
     const total=(d.results||[]).length;
-    const cacheLabel=d.fromCache?' (キャッシュ)':'';
-    setStatus(`${ok}/${total}人 取得完了${cacheLabel}`);
+    const staleLabel=d.stale?' (前回データ)':'';
+    setStatus(`✓ ${ok}/${total}人 取得完了${staleLabel}`);
 
     const t=d.cachedAt?new Date(d.cachedAt):new Date();
     document.getElementById('lastUpdated').textContent=`${t.getMonth()+1}/${t.getDate()} ${t.getHours()}:${String(t.getMinutes()).padStart(2,'0')} 更新`;
@@ -762,27 +798,42 @@ async function fetchAll(force=false){
   }
 }
 
-// ===== バックグラウンド更新 =====
+// ===== バックグラウンド更新（SWRの裏側） =====
+let lastBgRefreshAt = 0;
+const BG_REFRESH_DEBOUNCE = 30 * 1000; // 30秒以内の連続実行は省く（事故防止）
+
 async function bgRefresh(){
   if(!groupId||!members.length) return;
   if(skipNextBgRefresh){ skipNextBgRefresh=false; return; }
+  if(Date.now() - lastBgRefreshAt < BG_REFRESH_DEBOUNCE) return;
+  lastBgRefreshAt = Date.now();
+
+  setStatus('🔄 最新を確認中...');
   try{
     const r=await fetch(`/api/get-shifts?groupId=${encodeURIComponent(groupId)}&force=1`);
-    if(!r.ok) return;
+    if(!r.ok){ setStatus('✓ 表示中（確認失敗）'); return; }
     const d=await r.json();
-    if(!d.results||d.fromCache) return;
+    if(!d.results){ setStatus('✓ 表示中'); return; }
+
+    const ok=(d.results||[]).filter(x=>!x.error).length;
+    const total=(d.results||[]).length;
 
     // 差分チェック
-    const newData=JSON.stringify(d.results.map(r=>({name:r.name,shifts:r.shifts,pendingShifts:r.pendingShifts,rejectedShifts:r.rejectedShifts})));
-    if(newData===lastShiftData) return;
+    const newData=JSON.stringify(d.results.map(x=>({name:x.name,shifts:x.shifts,pendingShifts:x.pendingShifts,rejectedShifts:x.rejectedShifts})));
+    if(newData===lastShiftData){
+      setStatus(`✓ 最新（${ok}/${total}人）${d.stale?' (前回データ)':''}`);
+      return;
+    }
 
-    // 差分あり→更新
+    // 差分あり→静かに差し替え
     lastShiftData=newData;
+    lastResults=d.results||[];
     renderShifts(d.results||[]);
     const t=new Date(d.cachedAt);
     document.getElementById('lastUpdated').textContent=`${t.getMonth()+1}/${t.getDate()} ${t.getHours()}:${String(t.getMinutes()).padStart(2,'0')} 更新`;
+    setStatus(`✓ 最新（${ok}/${total}人）`);
     showToast('シフトが更新されました！');
-  }catch(e){}
+  }catch(e){ setStatus('✓ 表示中（確認失敗）'); }
 }
 
 // ===== 描画 =====
@@ -1963,6 +2014,13 @@ document.querySelectorAll('.tab').forEach(tab=>{
 // 起動
 const savedId=localStorage.getItem('shiftGroupId');
 if(savedId) enterGroup(savedId);
+
+// アプリに戻ってきた時（ホーム画面から再表示など）も最新を確認
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState==='visible' && groupId && members.length){
+    bgRefresh(); // 30秒デバウンス付きなので連発しても安全
+  }
+});
 </script>
 </body>
 </html>
