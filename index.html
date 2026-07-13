@@ -1733,6 +1733,15 @@ const DAY_JP=['日','月','火','水','木','金','土'];
 
 function openApplyMenu() {
   if(!members.length){ showToast('メンバーが登録されていません'); return; }
+
+  // この端末の持ち主が既に分かってる（パスワード設定済み）なら一覧をスキップして即申請へ
+  const myName = getMyApplyName();
+  if(myName){
+    const me = members.find(m => m.name === myName);
+    if(me){ openApply(me.url, me.name); return; }
+    // メンバー名が変わった等で見つからない場合は一覧にフォールバック
+  }
+
   document.getElementById('applyTitle').textContent = 'シフト申請';
   document.getElementById('applyOverlay').classList.remove('hidden');
   showApplyScreen('applyMemberSelect');
@@ -1752,8 +1761,13 @@ function showApplyScreen(id) {
 }
 
 async function openApply(url, name) {
+  // 申請ページのURLを決定：
+  // ・?s=xxx 形式 → bulk_edit（まとめて申請）を直接開く
+  // ・パス型（/staff/login/...）→ 登録URLをそのまま開く（ciftrトップの「まとめて申請」から進んでもらう）
   const sParam = url.match(/[?&]s=([^&]+)/)?.[1];
-  if (!sParam) { showToast('URLからsパラメータを取得できません'); return; }
+  const applyTarget = sParam
+    ? `http://m.s1.ciftr.jp/shift/bulk_edit?s=${sParam}`
+    : url;
 
   const pwKey = 'applyPw_' + groupId + '_' + name;
 
@@ -1777,10 +1791,11 @@ async function openApply(url, name) {
 
   const savedPw = localStorage.getItem(pwKey);
   if (!savedPw) {
-    showApplyAuth(name, sParam);
+    showApplyAuth(name, applyTarget);
   } else {
     closeApply();
-    window.open(`http://m.s1.ciftr.jp/shift/bulk_edit?s=${sParam}`, '_blank');
+    window.open(applyTarget, '_blank');
+    if (!sParam) showToast('ページ内の「まとめて申請」から申請してください');
   }
 }
 
@@ -1795,9 +1810,12 @@ function getMyApplyName() {
   return null;
 }
 
-function showApplyAuth(name, sParam) {
+let _applyAuthTarget = null; // 認証後に開くURL（onclick属性のクォート事故防止のため変数渡し）
+
+function showApplyAuth(name, applyTarget) {
   const old = document.getElementById('applyAuthDialog');
   if (old) old.remove();
+  _applyAuthTarget = applyTarget;
 
   const dialog = document.createElement('div');
   dialog.id = 'applyAuthDialog';
@@ -1808,14 +1826,14 @@ function showApplyAuth(name, sParam) {
       <div style="font-size:12px;color:var(--muted);">初回のみ：自分だけのパスワードを設定してください（次回から不要）</div>
       <input type="password" id="authPw1" placeholder="パスワード（4文字以上）" style="background:#080814;border:2px solid var(--muted);color:var(--text);font-family:inherit;font-size:14px;padding:8px;width:100%;outline:none;">
       <input type="password" id="authPw2" placeholder="確認入力" style="background:#080814;border:2px solid var(--muted);color:var(--text);font-family:inherit;font-size:14px;padding:8px;width:100%;outline:none;">
-      <button class="btn-px btn-primary" style="background:var(--accent3);" onclick="confirmApplyAuth('${esc(name)}','${sParam}')">設定してシフターを開く ▶</button>
+      <button class="btn-px btn-primary" style="background:var(--accent3);" onclick="confirmApplyAuth('${esc(name)}')">設定してシフターを開く ▶</button>
       <button class="btn-px btn-ghost btn-sm" onclick="document.getElementById('applyAuthDialog').remove()">キャンセル</button>
     </div>`;
   document.body.appendChild(dialog);
   setTimeout(() => document.getElementById('authPw1')?.focus(), 100);
 }
 
-async function confirmApplyAuth(name, sParam) {
+async function confirmApplyAuth(name) {
   const pw1 = document.getElementById('authPw1')?.value || '';
   const pw2 = document.getElementById('authPw2')?.value || '';
   if (pw1.length < 4) { showToast('4文字以上で設定してください'); return; }
@@ -1826,8 +1844,13 @@ async function confirmApplyAuth(name, sParam) {
   try { await fetch(`/api/admin-shift?action=clear-reset&groupId=${encodeURIComponent(groupId)}&name=${encodeURIComponent(name)}`); } catch(e) {}
   document.getElementById('applyAuthDialog').remove();
   closeApply();
-  window.open(`http://m.s1.ciftr.jp/shift/bulk_edit?s=${sParam}`, '_blank');
-  showToast('設定しました！次回からパスワード不要です');
+  if (_applyAuthTarget) {
+    const target = _applyAuthTarget;
+    _applyAuthTarget = null;
+    window.open(target, '_blank');
+    if (!target.includes('bulk_edit')) showToast('ページ内の「まとめて申請」から申請してください');
+    else showToast('設定しました！次回からパスワード不要です');
+  }
 }
 
 
