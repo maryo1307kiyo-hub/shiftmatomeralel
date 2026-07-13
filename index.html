@@ -807,6 +807,7 @@ function renderMembers(){
       <button class="btn-px btn-ghost btn-sm" onclick="exportMemberCal('${esc(m.name)}')" style="font-size:10px;padding:3px 8px;">📅</button>
       <button class="btn-px btn-ghost btn-sm" onclick="editNickname('${esc(m.url)}','${esc(m.name)}')" style="font-size:10px;padding:3px 6px;">✏️</button>
       <button class="btn-px btn-ghost btn-sm" onclick="editColor('${esc(m.url)}','${esc(m.name)}')" style="font-size:10px;padding:3px 6px;">🎨</button>
+      <button class="btn-px btn-ghost btn-sm" onclick="editUrl('${esc(m.url)}','${esc(m.name)}')" style="font-size:10px;padding:3px 6px;">🔗</button>
       <button class="btn-px btn-red" onclick="removeMember('${esc(m.url)}','${esc(m.name)}')">DEL</button>
     </div>`).join('');
 }
@@ -1318,6 +1319,37 @@ async function editNickname(url, currentName){
     renderMembers();
     showToast(`${currentName} → ${newName} に変更しました`);
   }catch(e){ showToast('変更に失敗しました'); }
+}
+
+// ===== URL更新（シフター再発行時のリンク差し替え） =====
+async function editUrl(oldUrl, name){
+  const newUrl = prompt(`${name} の新しいシフターURLを入力してください\n（ciftr.jpの再ログイン後のURL）`, '');
+  if(!newUrl) return;
+  if(!newUrl.includes('ciftr.jp')){ showToast('ciftr.jpのURLを入力してください'); return; }
+  if(newUrl === oldUrl){ showToast('同じURLです'); return; }
+
+  try{
+    const r = await fetch(`/api/groups?groupId=${encodeURIComponent(groupId)}&action=updateUrl`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ oldUrl, newUrl })
+    });
+    const d = await r.json();
+    if(d.error){ showToast(d.error==='already exists'?'このURLは他のメンバーで使用中です':d.error); return; }
+
+    // カラー設定を新URLに引き継ぐ（URLキーで保存されているため）
+    const memberColors = JSON.parse(localStorage.getItem('memberColors_'+groupId)||'{}');
+    if(memberColors[oldUrl] !== undefined){
+      memberColors[newUrl] = memberColors[oldUrl];
+      delete memberColors[oldUrl];
+      localStorage.setItem('memberColors_'+groupId, JSON.stringify(memberColors));
+    }
+
+    // ※シフト申請パスワード（applyPw_グループID_名前）は名前キーなので変更不要、自動的に引き継がれる
+
+    members = d.members;
+    renderMembers();
+    showToast(`${name} のURLを更新しました`);
+  }catch(e){ showToast('更新に失敗しました'); }
 }
 
 // ===== カラー編集 =====
