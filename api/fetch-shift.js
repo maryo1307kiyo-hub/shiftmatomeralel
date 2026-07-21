@@ -15,13 +15,14 @@ export default async function handler(req, res) {
   };
 
   try {
-    // 確定シフト取得
+    // 確定シフト取得（赤時刻・黒時刻の区別なく全て確定として扱う）
     const confirmedRes = await fetch(url, { headers });
     if (!confirmedRes.ok) return res.status(confirmedRes.status).json({ error: `HTTP ${confirmedRes.status}` });
     const confirmedHtml = await confirmedRes.text();
-    const { shifts: confirmedShifts, pending: pendingFromConfirmed, rejected: confirmedRejected, year, month } = parseConfirmedHTML(confirmedHtml);
+    const { shifts: confirmedShifts, rejected: confirmedRejected, year, month } = parseConfirmedHTML(confirmedHtml);
 
-    // 申請シフト取得用の s= パラメータ：
+    // 申請シフト（申請中）の唯一の情報源は bulk_edit ページ
+    // s= パラメータ：
     // 1) URLから抽出（?s=xxx 形式）
     // 2) 無ければ確定ページHTML内のリンク（/shift/bulk_edit?s=xxx）から自動抽出（パス型URL対応）
     const sParam = url.match(/[?&]s=([^&]+)/)?.[1]
@@ -30,14 +31,14 @@ export default async function handler(req, res) {
     // ホストは登録URLに合わせる（旧: m.s1 / 新: m-s1 両対応）
     const origin = url.match(/^https?:\/\/[^\/]+/)?.[0] || 'https://m-s1.ciftr.jp';
 
-    let pendingFromBulk = [];
+    let pendingShifts = [];
     if (sParam) {
       const bulkUrl = `${origin}/shift/bulk_edit?s=${sParam}`;
       try {
         const pendingRes = await fetch(bulkUrl, { headers });
         if (pendingRes.ok) {
           const pendingHtml = await pendingRes.text();
-          pendingFromBulk = parsePendingHTML(pendingHtml, year, month);
+          pendingShifts = parsePendingHTML(pendingHtml, year, month);
         }
       } catch(e) { /* 申請シフト取得失敗は無視 */ }
     }
@@ -45,23 +46,15 @@ export default async function handler(req, res) {
     // 確定シフトの日付セット
     const confirmedDates = new Set(confirmedShifts.map(s => s.date));
 
-    // 申請シフトを統合：確定ページの赤文字（希望）＋ bulk_editの入力値
-    // 同一日付は確定ページ由来を優先（時刻表示が正規化済みのため）
-    const pendingMap = new Map();
-    for (const s of pendingFromBulk) {
-      if (!s.rejected) pendingMap.set(s.date, s);
-    }
-    for (const s of pendingFromConfirmed) {
-      pendingMap.set(s.date, s);
-    }
-    const pendingOnly = [...pendingMap.values()].filter(s => !confirmedDates.has(s.date));
+    // 申請シフトから確定済みを除外し、不採用を分離
+    const pendingOnly = pendingShifts.filter(s => !confirmedDates.has(s.date) && !s.rejected);
+    const pendingRejected = pendingShifts.filter(s => s.rejected && !confirmedDates.has(s.date));
 
-    // 不採用の統合：確定ページの「---」＋ 申請ページの「--:-- --:--」
-    const bulkRejected = pendingFromBulk.filter(s => s.rejected && !confirmedDates.has(s.date));
+    // 確定ページの「---」検出 と 申請ページの不採用検出 を統合（重複日付は除去）
     const rejectedDates = new Set();
     const rejectedOnly = [];
-    for (const r of [...confirmedRejected, ...bulkRejected]) {
-      if (!confirmedDates.has(r.date) && !rejectedDates.has(r.date) && !pendingMap.has(r.date)) {
+    for (const r of [...confirmedRejected, ...pendingRejected]) {
+      if (!confirmedDates.has(r.date) && !rejectedDates.has(r.date)) {
         rejectedDates.add(r.date);
         rejectedOnly.push({ date: r.date, rejected: true });
       }
@@ -90,13 +83,8 @@ export default async function handler(req, res) {
 
 function parseConfirmedHTML(html) {
   const shifts = [];
-  const pending = [];
   const rejected = [];
-
-  // 赤文字（希望シフト・未確定）にマーカー◆を付けてからタグを剥がす
-  // ciftrは確定ページ上で「黒＝確定」「赤＝希望中」を色で区別している
   const text = html
-    .replace(/<font\s+color=["']?#ff0000["']?\s*>/gi, '◆')
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/?(div|p|li|tr|td|th)[^>]*>/gi, '\n')
     .replace(/<[^>]+>/g, '')
@@ -109,12 +97,7 @@ function parseConfirmedHTML(html) {
   let year = new Date().getFullYear();
   let month = null;
 
-  for (const rawLine of lines) {
-    // 曜日ラベルの赤（日曜・祝日の「(日)」等）は無視し、時刻部分の赤だけを希望判定に使う
-    const dowStripped = rawLine.replace(/([（(])◆/g, '$1');
-    const hasRed = dowStripped.includes('◆');
-    const line = rawLine.replace(/◆/g, ''); // マーカー除去後のテキストで解析
-
+  for (const line of lines) {
     const ymMatch = line.match(/(\d{4})年\s*(\d{1,2})月/);
     if (ymMatch) { year = parseInt(ymMatch[1]); month = parseInt(ymMatch[2]); continue; }
     const mOnly = line.match(/^(\d{1,2})月$/);
@@ -138,18 +121,15 @@ function parseConfirmedHTML(html) {
     if (dayMatch && month !== null && dayMatch[2]) {
       const parts = dayMatch[2].trim().split(/[-–ー]/);
       if (parts.length >= 2) {
-        const entry = {
+        shifts.push({
           date: `${year}-${String(month).padStart(2,'0')}-${String(parseInt(dayMatch[1])).padStart(2,'0')}`,
           start: parts[0].trim(),
           end: parts[1].trim()
-        };
-        // 赤文字の時間＝希望（未確定）、黒＝確定
-        if (hasRed) pending.push(entry);
-        else shifts.push(entry);
+        });
       }
     }
   }
-  return { shifts, pending, rejected, year, month };
+  return { shifts, rejected, year, month };
 }
 
 function parsePendingHTML(html, baseYear, baseMonth) {
