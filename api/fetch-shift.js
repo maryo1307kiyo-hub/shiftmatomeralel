@@ -108,7 +108,7 @@ function parseConfirmedHTML(html) {
     }
 
     // "7日(土) ---" パターン（申請していたシフトが取り消し・削除された）
-    const rejectedMatch = line.match(/^(\d{1,2})日[（(][月火水木金土日][）)][\s　]*-{2,}\s*$/);
+    const rejectedMatch = line.match(/^(\d{1,2})日[（(][月火水木金土日][）)][\s　]*[-–ー−—]{2,}[\s　]*$/);
     if (rejectedMatch && month !== null) {
       rejected.push({
         date: `${year}-${String(month).padStart(2,'0')}-${String(parseInt(rejectedMatch[1])).padStart(2,'0')}`,
@@ -117,16 +117,13 @@ function parseConfirmedHTML(html) {
       continue;
     }
 
-    const dayMatch = line.match(/^(\d{1,2})日[（(][月火水木金土日][）)][\s　]*([\d:]+[-–ー][\d:]+)?/);
-    if (dayMatch && month !== null && dayMatch[2]) {
-      const parts = dayMatch[2].trim().split(/[-–ー]/);
-      if (parts.length >= 2) {
-        shifts.push({
-          date: `${year}-${String(month).padStart(2,'0')}-${String(parseInt(dayMatch[1])).padStart(2,'0')}`,
-          start: parts[0].trim(),
-          end: parts[1].trim()
-        });
-      }
+    const dayMatch = line.match(/^(\d{1,2})日[（(][月火水木金土日][）)][\s　]*(\d{1,2}:\d{2})[\s　]*[-–ー~〜][\s　]*(\d{1,2}:\d{2})/);
+    if (dayMatch && month !== null) {
+      shifts.push({
+        date: `${year}-${String(month).padStart(2,'0')}-${String(parseInt(dayMatch[1])).padStart(2,'0')}`,
+        start: dayMatch[2].trim(),
+        end: dayMatch[3].trim()
+      });
     }
   }
   return { shifts, rejected, year, month };
@@ -161,7 +158,7 @@ function parsePendingHTML(html, baseYear, baseMonth) {
     }
 
     // "25日(木) 1530 1900" パターン（申請中の入力値）
-    const dayMatch = line.match(/^(\d{1,2})日[（(][月火水木金土日][）)][\s　]*(\d{3,4})\s+(\d{3,4})/);
+    const dayMatch = line.match(/^(\d{1,2})日[（(][月火水木金土日][）)][\s　]*(\d{3,4})[\s　]+(\d{3,4})/);
     if (dayMatch && month !== null) {
       shifts.push({
         date: `${year}-${String(month).padStart(2,'0')}-${String(parseInt(dayMatch[1])).padStart(2,'0')}`,
