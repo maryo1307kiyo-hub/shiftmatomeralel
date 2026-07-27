@@ -19,6 +19,10 @@ export default async function handler(req, res) {
     const confirmedRes = await fetch(url, { headers });
     if (!confirmedRes.ok) return res.status(confirmedRes.status).json({ error: `HTTP ${confirmedRes.status}` });
     const confirmedHtml = await confirmedRes.text();
+    // ログイン期限切れ／シフト表でないページを受け取った場合は明示的にエラーにする
+    if (confirmedHtml.includes('有効期限が切れました') || !confirmedHtml.includes('確定シフト')) {
+      return res.status(503).json({ error: 'ciftr session expired or invalid page' });
+    }
     const { shifts: confirmedShifts, rejected: confirmedRejected, year, month } = parseConfirmedHTML(confirmedHtml);
 
     // 申請シフト（申請中）の唯一の情報源は bulk_edit ページ
