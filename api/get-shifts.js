@@ -73,14 +73,45 @@ export default async function handler(req, res) {
 
   // 前回の申請シフトキャッシュを取得（申請ページが消えた期間のバックアップ）
   const prevPendingCache = await redisGet(pendingCacheKey) || {};
+  // 個別メンバーの取得失敗時に使う「前回の正常データ」
+  const prevShiftsCache = await redisGet(cacheKey);
+  const prevByName = {};
+  for (const r of (prevShiftsCache?.results || [])) {
+    if (r && r.name && (r.shifts || []).length > 0) prevByName[r.name] = r;
+  }
 
   // 全員分のシフトを取得
-  const results = await Promise.all(members.map(async (member, idx) => {
+  // 同時実行数を制限して取得（ciftr側の同時接続制限対策）
+  const CONCURRENCY = 4;
+  const runLimited = async (items, worker) => {
+    const out = new Array(items.length);
+    let cursor = 0;
+    const runners = Array.from({ length: Math.min(CONCURRENCY, items.length) }, async () => {
+      while (cursor < items.length) {
+        const i = cursor++;
+        out[i] = await worker(items[i], i);
+      }
+    });
+    await Promise.all(runners);
+    return out;
+  };
+
+  const results = await runLimited(members, async (member, idx) => {
     try {
       const apiUrl = `${getBaseUrl(req)}/api/fetch-shift?url=${encodeURIComponent(member.url)}`;
-      const r = await fetch(apiUrl);
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const d = await r.json();
+      // 失敗時は間隔を空けて最大3回まで再試行（ciftrの一時的な拒否対策）
+      let d = null, lastErr = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (attempt > 0) await new Promise(r2 => setTimeout(r2, 600 * attempt));
+        try {
+          const r = await fetch(apiUrl);
+          if (!r.ok) { lastErr = new Error(`HTTP ${r.status}`); continue; }
+          const j = await r.json();
+          if (j.error) { lastErr = new Error(j.error); continue; }
+          d = j; break;
+        } catch (e2) { lastErr = e2; }
+      }
+      if (!d) throw lastErr || new Error('fetch failed');
 
       // 申請シフトの処理
       let pendingShifts = d.pendingShifts || [];
@@ -125,9 +156,14 @@ export default async function handler(req, res) {
 
       return { name: member.name, colorIdx: idx, ...d, pendingShifts };
     } catch(e) {
+      // 取得失敗 → 前回の正常データがあればそれを表示し続ける（消えるより古い方がマシ）
+      const prev = prevByName[member.name];
+      if (prev) {
+        return { ...prev, colorIdx: idx, error: e.message, stale: true };
+      }
       return { name: member.name, colorIdx: idx, error: e.message, shifts: [], pendingShifts: [], rejectedShifts: [] };
     }
-  }));
+  });
 
   const now = new Date().toISOString();
   const data = { results, cachedAt: now, fromCache: false };
