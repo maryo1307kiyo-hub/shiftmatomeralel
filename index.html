@@ -62,6 +62,8 @@
     .group-info{background:#080814;border:var(--px) solid var(--accent);padding:10px 12px;display:flex;align-items:center;justify-content:space-between;box-shadow:3px 3px 0 #2a4477}
     .group-id-text{font-family:'Press Start 2P',monospace;font-size:8px;color:var(--accent);letter-spacing:.1em}
     .member-list{display:flex;flex-direction:column;gap:6px}
+    .member-card.member-error{border-color:var(--accent2)!important;background:#cc445511}
+    .member-err-tag{font-size:10px;color:var(--accent2);border:var(--px) solid var(--accent2);padding:1px 5px;margin-left:6px;white-space:nowrap}
     .member-card{background:#080814;border:var(--px) solid var(--border);padding:10px 12px;display:flex;align-items:center;gap:10px}
     .member-dot{width:8px;height:8px;border:var(--px) solid;flex-shrink:0}
     .member-info{flex:1;overflow:hidden}
@@ -723,6 +725,7 @@ async function fetchAll(force=false){
       document.getElementById('fetchBtn').disabled=false;
       lastResults=d.results||[];
       renderShifts(d.results||[]);
+      renderMembers();
       lastShiftData=JSON.stringify((d.results||[]).map(r=>({name:r.name,shifts:r.shifts,pendingShifts:r.pendingShifts,rejectedShifts:r.rejectedShifts})));
       loadEvents(d.results||[]);
 
@@ -777,6 +780,7 @@ async function fetchAll(force=false){
     document.getElementById('fetchBtn').disabled=false;
     lastResults=d.results||[];
     renderShifts(d.results||[]);
+    renderMembers();
     lastShiftData=JSON.stringify((d.results||[]).map(r=>({name:r.name,shifts:r.shifts,pendingShifts:r.pendingShifts,rejectedShifts:r.rejectedShifts})));
     lastBgRefreshAt = Date.now();
 
@@ -829,6 +833,7 @@ async function bgRefresh(){
     lastShiftData=newData;
     lastResults=d.results||[];
     renderShifts(d.results||[]);
+    renderMembers();
     const t=new Date(d.cachedAt);
     document.getElementById('lastUpdated').textContent=`${t.getMonth()+1}/${t.getDate()} ${t.getHours()}:${String(t.getMinutes()).padStart(2,'0')} 更新`;
     setStatus(`✓ 最新（${ok}/${total}人）`);
@@ -847,12 +852,15 @@ function renderMembers(){
     '#99dd44','#4499dd','#dd4444','#44dd44','#4444dd','#dddd44','#44dddd','#dd44dd'];
   // メンバーカラーはlocalStorageから取得
   const memberColors = JSON.parse(localStorage.getItem('memberColors_'+groupId)||'{}');
+  // 取得に失敗したメンバーを判定（シフト取得結果のerrorフラグ）
+  const errByName = {};
+  for (const r of (lastResults||[])) { if (r && r.error) errByName[r.name] = r.error; }
   // マイページの色設定を反映
   list.innerHTML=members.map((m,i)=>`
-    <div class="member-card">
+    <div class="member-card${errByName[m.name]?' member-error':''}">
       <div class="member-dot" style="color:${memberColors[m.url]||dotColors[i%8]};border-color:${memberColors[m.url]||dotColors[i%8]}"></div>
       <div class="member-info">
-        <div class="member-name" style="color:${memberColors[m.url]||dotColors[i%8]};font-weight:bold;font-size:14px;">  ${esc(m.name)}</div>
+        <div class="member-name" style="color:${memberColors[m.url]||dotColors[i%8]};font-weight:bold;font-size:14px;">  ${esc(m.name)}${errByName[m.name]?'<span class="member-err-tag">⚠ 取得失敗</span>':''}</div>
         <div class="member-url">${esc(maskCiftrUrl(m.url))}</div>
       </div>
       <button class="btn-px btn-ghost btn-sm" onclick="exportMemberCal('${esc(m.name)}')" style="font-size:10px;padding:3px 8px;">📅</button>
