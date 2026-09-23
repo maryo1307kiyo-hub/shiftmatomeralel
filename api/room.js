@@ -179,10 +179,21 @@ export default async function handler(req, res) {
       const minL = Math.max(1, Math.min(3, parseInt(minLevel) || 1));
       const maxL = Math.max(minL, Math.min(3, parseInt(maxLevel) || minL));
 
-      let code;
-      for (let i = 0; i < 5; i++) {
-        code = Math.random().toString(36).slice(2, 7).toUpperCase();
-        if (!(await rGet(`room:${code}`))) break;
+      // ルームIDはユーザー指定を優先（英数字・ハイフン・アンダーバーのみ）
+      let code = (body.customCode || '').trim();
+      if (code) {
+        if (!/^[a-zA-Z0-9_-]{1,20}$/.test(code)) {
+          return res.status(400).json({ error: 'ルームIDは英数字・ハイフン・アンダーバーのみ使えます' });
+        }
+        const existing = await rGet(`room:${code}`);
+        if (existing && existing.state !== 'finished') {
+          return res.status(409).json({ error: 'そのルームIDは使用中です' });
+        }
+      } else {
+        for (let i = 0; i < 5; i++) {
+          code = Math.random().toString(36).slice(2, 7).toUpperCase();
+          if (!(await rGet(`room:${code}`))) break;
+        }
       }
 
       const room = {
@@ -204,7 +215,7 @@ export default async function handler(req, res) {
     if (action === 'join') {
       const { code, playerId, name } = body;
       if (!code || !playerId || !name) return res.status(400).json({ error: '入力が不足しています' });
-      const key = `room:${code.toUpperCase()}`;
+      const key = `room:${code}`;
       const room = await rGet(key);
       if (!room) return res.status(404).json({ error: 'ルームが見つかりません' });
       if (room.state !== 'waiting') return res.status(409).json({ error: 'すでに開始しています' });
@@ -221,7 +232,7 @@ export default async function handler(req, res) {
 
     // --- 状態取得 ---
     if (action === 'state') {
-      const code = (req.query.code || '').toUpperCase();
+      const code = req.query.code || '';
       const room = await rGet(`room:${code}`);
       if (!room) return res.status(404).json({ error: 'ルームが見つかりません' });
       return res.status(200).json({ room: publicRoom(room) });
@@ -230,7 +241,7 @@ export default async function handler(req, res) {
     // --- 退出 ---
     if (action === 'leave') {
       const { code, playerId } = body;
-      const key = `room:${(code||'').toUpperCase()}`;
+      const key = `room:${code||''}`;
       const room = await rGet(key);
       if (!room) return res.status(200).json({ ok: true });
       room.players = room.players.filter(p => p.id !== playerId);
@@ -247,7 +258,7 @@ export default async function handler(req, res) {
     // --- 練習開始（0試合目・イージー固定・勝敗に含めない） ---
     if (action === 'practice') {
       const { code, playerId } = body;
-      const key = `room:${(code||'').toUpperCase()}`;
+      const key = `room:${code||''}`;
       const room = await rGet(key);
       if (!room) return res.status(404).json({ error: 'ルームが見つかりません' });
       if (room.hostId !== playerId) return res.status(403).json({ error: 'ホストのみ開始できます' });
@@ -271,7 +282,7 @@ export default async function handler(req, res) {
     // --- 準備OK（練習後、全員そろったら本戦開始） ---
     if (action === 'ready') {
       const { code, playerId } = body;
-      const key = `room:${(code||'').toUpperCase()}`;
+      const key = `room:${code||''}`;
       const room = await rGet(key);
       if (!room) return res.status(404).json({ error: 'ルームが見つかりません' });
       const p = room.players.find(x => x.id === playerId);
@@ -288,7 +299,7 @@ export default async function handler(req, res) {
     // --- 回答送信 ---
     if (action === 'answer') {
       const { code, playerId, value } = body;
-      const key = `room:${(code||'').toUpperCase()}`;
+      const key = `room:${code||''}`;
       const room = await rGet(key);
       if (!room) return res.status(404).json({ error: 'ルームが見つかりません' });
       const q = room.questions[room.questions.length - 1];
@@ -313,7 +324,7 @@ export default async function handler(req, res) {
     // --- 集計（時間切れ時にクライアントから呼ばれる） ---
     if (action === 'finish') {
       const { code } = body;
-      const key = `room:${(code||'').toUpperCase()}`;
+      const key = `room:${code||''}`;
       const room = await rGet(key);
       if (!room) return res.status(404).json({ error: 'ルームが見つかりません' });
       if (room.state === 'result' || room.state === 'finished') return res.status(200).json({ ok: true });
@@ -323,7 +334,7 @@ export default async function handler(req, res) {
     // --- 次のセットへ ---
     if (action === 'next') {
       const { code, playerId } = body;
-      const key = `room:${(code||'').toUpperCase()}`;
+      const key = `room:${code||''}`;
       const room = await rGet(key);
       if (!room) return res.status(404).json({ error: 'ルームが見つかりません' });
       if (room.hostId !== playerId) return res.status(403).json({ error: 'ホストのみ進行できます' });
