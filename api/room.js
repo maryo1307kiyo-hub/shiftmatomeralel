@@ -57,9 +57,9 @@ const DRINKS = new Set([
 
 // 難易度定義（1=イージー, 2=ノーマル, 3=エクストラ）
 const DIFF = {
-  1: { label:'イージー',   range:[3,6],  speed:2000, answerSec:12 },
-  2: { label:'ノーマル',   range:[5,10], speed:1800, answerSec:7  },
-  3: { label:'エクストラ', range:[8,15], speed:1500, answerSec:6  },
+  1: { label:'イージー',   range:[3,6],  speed:2000, answerSec:15 },
+  2: { label:'ノーマル',   range:[5,10], speed:1800, answerSec:13 },
+  3: { label:'エクストラ', range:[8,15], speed:1500, answerSec:10 },
 };
 
 function buildPool(level) {
