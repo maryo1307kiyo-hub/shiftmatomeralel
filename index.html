@@ -158,6 +158,26 @@
     .menu-fab{width:60px;height:44px;background:var(--surface);border:var(--px) solid var(--accent);box-shadow:3px 3px 0 #2a4477;display:flex;align-items:center;justify-content:center;font-family:'DotGothic16',monospace;font-size:11px;color:var(--accent);cursor:pointer;}
     .menu-fab:active{transform:translate(2px,2px);box-shadow:1px 1px 0 #2a4477}
     .menu-item-text{width:auto;min-width:80px;font-size:11px;font-family:'DotGothic16',monospace;color:var(--accent3);border-color:var(--accent3);box-shadow:3px 3px 0 #224433;}
+    /* オンライン対戦 */
+    .vs-overlay{position:fixed;inset:0;background:var(--bg);z-index:360;display:flex;flex-direction:column;overflow-y:auto}
+    .vs-overlay.hidden{display:none}
+    .vs-header{background:var(--surface);border-bottom:var(--px) solid var(--accent4);padding:8px 14px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:5}
+    .vs-title{font-family:'Press Start 2P',monospace;font-size:8px;color:var(--accent4)}
+    .vs-body{padding:16px;display:flex;flex-direction:column;gap:12px;max-width:420px;margin:0 auto;width:100%}
+    .vs-code{font-family:'Press Start 2P',monospace;font-size:20px;color:var(--accent3);text-align:center;letter-spacing:4px;background:#080814;border:var(--px) solid var(--accent3);padding:14px}
+    .vs-player{display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--surface);border:var(--px) solid var(--border);font-size:13px}
+    .vs-player.me{border-color:var(--accent3)}
+    .vs-player.ready{background:#44aa6611}
+    .vs-player-name{flex:1}
+    .vs-badge{font-family:'Press Start 2P',monospace;font-size:8px;color:var(--accent4)}
+    .vs-sub{font-size:11px;color:var(--muted)}
+    .vs-flash{min-height:120px;display:flex;align-items:center;justify-content:center;text-align:center;padding:10px}
+    .vs-flash-name{font-family:'DotGothic16',monospace;font-size:clamp(20px,8vw,30px);font-weight:bold;color:var(--accent3)}
+    .vs-timer{font-family:'Press Start 2P',monospace;font-size:16px;color:var(--accent2);text-align:center}
+    .vs-answer{font-family:'Press Start 2P',monospace;font-size:20px;color:var(--accent3);text-align:center;background:#080814;border:var(--px) solid var(--accent3);padding:14px;min-height:50px}
+    .vs-res-row{display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--border);font-size:13px}
+    .vs-res-ok{color:var(--accent3)}
+    .vs-res-ng{color:var(--muted)}
     /* フラッシュ会計 */
     .flash-overlay{position:fixed;inset:0;background:var(--bg);z-index:350;display:flex;flex-direction:column}
     .flash-overlay.hidden{display:none}
@@ -211,6 +231,7 @@
     .toast{position:fixed;bottom:36px;left:50%;transform:translateX(-50%);background:var(--surface);color:var(--accent3);font-size:12px;padding:8px 16px;border:var(--px) solid var(--accent3);box-shadow:3px 3px 0 #224433;z-index:999;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .2s}
     .toast.show{opacity:1}
   </style>
+  <script src="https://js.pusher.com/8.2/pusher.min.js"></script>
 </head>
 <body>
 
@@ -356,6 +377,7 @@
     <button class="menu-item-btn" onclick="openMypage();closeMenu()" title="マイページ">👤</button>
     <button class="menu-item-btn" onclick="openFortune();closeMenu()" title="今日の運勢">🔮</button>
     <button class="menu-item-btn" onclick="openFlashGameSetup();closeMenu()" title="フラッシュ会計">🧮</button>
+    <button class="menu-item-btn menu-item-text" onclick="vsOpen();closeMenu()" title="フラッシュ対戦">対戦</button>
     <button class="menu-item-btn menu-item-text" onclick="openApplyMenu();closeMenu()" title="シフト申請">シフト申請</button>
   </div>
   <button class="menu-fab" id="menuFab" onclick="toggleMenu()">MENU</button>
@@ -369,6 +391,108 @@
     <div class="fortune-item" id="fortuneItem"></div>
     <div class="fortune-msg">今日も一日、頑張りましょう♪</div>
     <button class="btn-px btn-ghost btn-sm" onclick="closeFortune()">閉じる</button>
+  </div>
+</div>
+
+<!-- オンライン対戦オーバーレイ -->
+<div class="vs-overlay hidden" id="vsOverlay">
+  <div class="vs-header">
+    <span class="vs-title">🆚 フラッシュ対戦</span>
+    <span class="vs-title" id="vsSetLabel"></span>
+    <button class="btn-px btn-red btn-sm" onclick="vsExit()">EXIT</button>
+  </div>
+  <div class="vs-body">
+
+    <!-- ロビー（作成・参加） -->
+    <div id="vsLobby" style="display:flex;flex-direction:column;gap:12px;">
+      <div style="font-family:'Press Start 2P',monospace;font-size:9px;color:var(--accent4);text-align:center;line-height:2">ONLINE BATTLE</div>
+      <div class="vs-sub">ニックネーム</div>
+      <input type="text" id="vsName" placeholder="例: くらち" maxlength="12" autocomplete="off">
+
+      <div style="height:1px;background:var(--border);margin:4px 0"></div>
+      <div class="vs-sub">ルームを作る</div>
+      <div class="vs-sub">セット数（1ゲームの試合数）</div>
+      <input type="number" id="vsSets" value="5" min="1" max="20" inputmode="numeric">
+      <div class="vs-sub">難易度レンジ（セットごとに上がっていく）</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <select id="vsMinLv" style="flex:1;background:#080814;border:2px solid var(--muted);color:var(--text);font-family:inherit;font-size:14px;padding:8px;outline:none">
+          <option value="1">イージー</option><option value="2">ノーマル</option><option value="3">エクストラ</option>
+        </select>
+        <span class="vs-sub">〜</span>
+        <select id="vsMaxLv" style="flex:1;background:#080814;border:2px solid var(--muted);color:var(--text);font-family:inherit;font-size:14px;padding:8px;outline:none">
+          <option value="1">イージー</option><option value="2">ノーマル</option><option value="3" selected>エクストラ</option>
+        </select>
+      </div>
+      <button class="btn-px btn-primary" style="background:var(--accent4);" onclick="vsCreate()">ルームを作る ▶</button>
+
+      <div style="height:1px;background:var(--border);margin:4px 0"></div>
+      <div class="vs-sub">ルームに参加する</div>
+      <input type="text" id="vsCode" placeholder="ルームコード（5文字）" maxlength="5" autocomplete="off" style="text-transform:uppercase">
+      <button class="btn-px btn-primary" style="background:var(--accent3);" onclick="vsJoin()">参加する ▶</button>
+    </div>
+
+    <!-- 待合室 -->
+    <div id="vsWaiting" style="display:none;flex-direction:column;gap:10px;">
+      <div class="vs-sub" style="text-align:center">ルームコード（仲間に共有）</div>
+      <div class="vs-code" id="vsCodeDisplay">-----</div>
+      <button class="btn-px btn-ghost btn-sm" onclick="vsShareCode()">コードをコピー</button>
+      <div class="vs-sub" id="vsSettingLabel"></div>
+      <div class="vs-sub">参加者</div>
+      <div id="vsPlayerList" style="display:flex;flex-direction:column;gap:6px;"></div>
+      <button class="btn-px btn-primary" style="background:var(--accent4);" id="vsStartBtn" onclick="vsStartPractice()">練習を開始する ▶</button>
+      <div class="vs-sub" id="vsHostNote" style="text-align:center">ホストの開始を待っています...</div>
+      <div style="height:1px;background:var(--border);margin:4px 0"></div>
+      <div class="vs-sub" style="text-align:center">待ってる間に遊べます</div>
+      <button class="btn-px btn-ghost" onclick="vsOpenLion()">🦁 ライオンランで暇つぶし</button>
+    </div>
+
+    <!-- 出題中 -->
+    <div id="vsPlaying" style="display:none;flex-direction:column;gap:10px;">
+      <div class="vs-sub" id="vsProgress" style="text-align:center"></div>
+      <div class="vs-flash"><div class="vs-flash-name" id="vsFlashName"></div></div>
+    </div>
+
+    <!-- 回答 -->
+    <div id="vsAnswering" style="display:none;flex-direction:column;gap:10px;">
+      <div class="vs-timer" id="vsCountdown">--</div>
+      <div class="vs-sub" style="text-align:center">合計金額は？</div>
+      <div class="vs-answer" id="vsAnswerDisplay">¥0</div>
+      <div class="numpad">
+        <button class="numpad-btn" onclick="vsNum('1')">1</button>
+        <button class="numpad-btn" onclick="vsNum('2')">2</button>
+        <button class="numpad-btn" onclick="vsNum('3')">3</button>
+        <button class="numpad-btn" onclick="vsNum('4')">4</button>
+        <button class="numpad-btn" onclick="vsNum('5')">5</button>
+        <button class="numpad-btn" onclick="vsNum('6')">6</button>
+        <button class="numpad-btn" onclick="vsNum('7')">7</button>
+        <button class="numpad-btn" onclick="vsNum('8')">8</button>
+        <button class="numpad-btn" onclick="vsNum('9')">9</button>
+        <button class="numpad-btn" onclick="vsNum('clear')">C</button>
+        <button class="numpad-btn" onclick="vsNum('0')">0</button>
+        <button class="numpad-btn" onclick="vsNum('back')">⌫</button>
+      </div>
+      <button class="game-btn" style="background:var(--accent3);" onclick="vsSubmit()">決定 ▶</button>
+      <div class="vs-sub" id="vsAnsweredCount" style="text-align:center"></div>
+    </div>
+
+    <!-- セット結果 -->
+    <div id="vsResult" style="display:none;flex-direction:column;gap:10px;">
+      <div id="vsResultTitle" style="text-align:center"></div>
+      <div class="vs-sub" style="text-align:center">正解 <span id="vsCorrectTotal" style="color:var(--accent3);font-weight:bold"></span></div>
+      <div id="vsResultList"></div>
+      <div class="vs-sub">現在のセット獲得数</div>
+      <div id="vsStandings"></div>
+      <button class="btn-px btn-primary" style="background:var(--accent4);" id="vsNextBtn" onclick="vsNext()">次のセットへ ▶</button>
+      <div class="vs-sub" id="vsWaitHost" style="text-align:center">ホストの進行を待っています...</div>
+    </div>
+
+    <!-- 最終結果 -->
+    <div id="vsFinal" style="display:none;flex-direction:column;gap:10px;">
+      <div style="font-family:'Press Start 2P',monospace;font-size:12px;color:var(--accent4);text-align:center">GAME SET</div>
+      <div id="vsFinalList"></div>
+      <button class="btn-px btn-ghost" onclick="vsExit()">終了する</button>
+    </div>
+
   </div>
 </div>
 
@@ -739,7 +863,8 @@ async function fetchAll(force=false){
         // キャッシュが無く実取得された（初回など）→ 裏取得は不要
         lastBgRefreshAt = Date.now();
         const ok=(d.results||[]).filter(r=>!r.error).length;
-        setStatus(`✓ ${ok}/${(d.results||[]).length}人 取得完了`);
+        const ng=(d.results||[]).length-ok;
+        setStatus(`✓ ${ok}/${(d.results||[]).length}人 取得完了${ng?` ⚠${ng}人失敗`:''}`);
       }
       return;
     }catch(e){
@@ -790,7 +915,8 @@ async function fetchAll(force=false){
     const ok=(d.results||[]).filter(r=>!r.error).length;
     const total=(d.results||[]).length;
     const staleLabel=d.stale?' (前回データ)':'';
-    setStatus(`✓ ${ok}/${total}人 取得完了${staleLabel}`);
+    const ng=total-ok;
+    setStatus(`✓ ${ok}/${total}人 取得完了${ng?` ⚠${ng}人失敗`:''}${staleLabel}`);
 
     const t=d.cachedAt?new Date(d.cachedAt):new Date();
     document.getElementById('lastUpdated').textContent=`${t.getMonth()+1}/${t.getDate()} ${t.getHours()}:${String(t.getMinutes()).padStart(2,'0')} 更新`;
@@ -1916,6 +2042,309 @@ async function adminResetPassword(){
     if(d.error){ showToast(d.error); return; }
     showToast(`${name} のパスワードをリセットしました`);
   }catch(e){ showToast('エラーが発生しました'); }
+}
+
+
+// ===== フラッシュ会計 オンライン対戦 =====
+let vs = {
+  playerId: null, name: '', code: null, isHost: false,
+  pusher: null, channel: null,
+  answer: '', answerTimer: null, flashTimer: null,
+  answerDeadline: 0, submitted: false, lastSetNo: 0,
+};
+
+function vsPlayerId(){
+  let id = localStorage.getItem('vsPlayerId');
+  if(!id){ id = 'p_' + Math.random().toString(36).slice(2,10); localStorage.setItem('vsPlayerId', id); }
+  return id;
+}
+
+function vsOpen(){
+  vs.playerId = vsPlayerId();
+  document.getElementById('vsOverlay').classList.remove('hidden');
+  vsShow('vsLobby');
+  const saved = localStorage.getItem('vsName') || (getMyApplyName() || '');
+  if(saved) document.getElementById('vsName').value = saved;
+}
+
+function vsShow(id){
+  ['vsLobby','vsWaiting','vsPlaying','vsAnswering','vsResult','vsFinal'].forEach(s=>{
+    const el = document.getElementById(s); if(el) el.style.display = 'none';
+  });
+  const t = document.getElementById(id); if(t) t.style.display = 'flex';
+}
+
+async function vsExit(){
+  try{ if(vs.code) await fetch('/api/room?action=leave',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:vs.code,playerId:vs.playerId})}); }catch(e){}
+  vsCleanup();
+  document.getElementById('vsOverlay').classList.add('hidden');
+}
+
+function vsCleanup(){
+  clearTimeout(vs.flashTimer); clearInterval(vs.answerTimer);
+  if(vs.channel && vs.pusher){ try{ vs.pusher.unsubscribe('room-'+vs.code); }catch(e){} }
+  if(vs.pusher){ try{ vs.pusher.disconnect(); }catch(e){} }
+  vs.pusher = null; vs.channel = null; vs.code = null; vs.isHost = false;
+}
+
+async function vsConnect(code){
+  const cfg = await (await fetch('/api/room?action=config')).json();
+  if(!cfg.enabled || !cfg.key){ showToast('対戦機能が未設定です'); return false; }
+  if(typeof Pusher === 'undefined'){ showToast('通信ライブラリを読み込めませんでした'); return false; }
+  vs.pusher = new Pusher(cfg.key, { cluster: cfg.cluster });
+  vs.channel = vs.pusher.subscribe('room-' + code);
+  vs.channel.bind('players', d => vsRenderPlayers(d.players, d.hostId));
+  vs.channel.bind('set-start', d => vsOnSetStart(d));
+  vs.channel.bind('answered', d => {
+    const el = document.getElementById('vsAnsweredCount');
+    if(el) el.textContent = `回答 ${d.answeredCount}/${d.totalPlayers}人`;
+  });
+  vs.channel.bind('set-result', d => vsOnSetResult(d));
+  vs.channel.bind('game-end', d => vsOnGameEnd(d));
+  return true;
+}
+
+async function vsCreate(){
+  const name = document.getElementById('vsName').value.trim();
+  if(!name){ showToast('ニックネームを入力してください'); return; }
+  localStorage.setItem('vsName', name);
+  vs.name = name;
+  const sets = parseInt(document.getElementById('vsSets').value) || 5;
+  const minLevel = parseInt(document.getElementById('vsMinLv').value);
+  const maxLevel = parseInt(document.getElementById('vsMaxLv').value);
+  if(maxLevel < minLevel){ showToast('難易度レンジが逆です'); return; }
+  try{
+    const r = await fetch('/api/room?action=create',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({playerId:vs.playerId,name,sets,minLevel,maxLevel})});
+    const d = await r.json();
+    if(d.error){ showToast(d.error); return; }
+    vs.code = d.room.code; vs.isHost = true;
+    if(!(await vsConnect(vs.code))) return;
+    vsEnterWaiting(d.room);
+  }catch(e){ showToast('作成に失敗しました'); }
+}
+
+async function vsJoin(){
+  const name = document.getElementById('vsName').value.trim();
+  const code = (document.getElementById('vsCode').value || '').trim().toUpperCase();
+  if(!name){ showToast('ニックネームを入力してください'); return; }
+  if(!code){ showToast('ルームコードを入力してください'); return; }
+  localStorage.setItem('vsName', name);
+  vs.name = name;
+  try{
+    const r = await fetch('/api/room?action=join',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({code,playerId:vs.playerId,name})});
+    const d = await r.json();
+    if(d.error){ showToast(d.error); return; }
+    vs.code = d.room.code; vs.isHost = (d.room.hostId === vs.playerId);
+    if(!(await vsConnect(vs.code))) return;
+    vsEnterWaiting(d.room);
+  }catch(e){ showToast('参加に失敗しました'); }
+}
+
+function vsEnterWaiting(room){
+  vsShow('vsWaiting');
+  document.getElementById('vsCodeDisplay').textContent = room.code;
+  const L = {1:'イージー',2:'ノーマル',3:'エクストラ'};
+  document.getElementById('vsSettingLabel').textContent =
+    `${room.settings.sets}セット制 / ${L[room.settings.minLevel]}〜${L[room.settings.maxLevel]}`;
+  vsRenderPlayers(room.players, room.hostId);
+}
+
+function vsRenderPlayers(players, hostId){
+  if(hostId) vs.isHost = (hostId === vs.playerId);
+  const el = document.getElementById('vsPlayerList');
+  if(el){
+    el.innerHTML = (players||[]).map(p=>`
+      <div class="vs-player${p.id===vs.playerId?' me':''}${p.ready?' ready':''}">
+        <span class="vs-player-name">${esc(p.name)}${p.id===vs.playerId?' (自分)':''}</span>
+        ${p.ready?'<span class="vs-badge">READY</span>':''}
+      </div>`).join('');
+  }
+  const startBtn = document.getElementById('vsStartBtn');
+  const note = document.getElementById('vsHostNote');
+  if(startBtn) startBtn.style.display = vs.isHost ? 'block' : 'none';
+  if(note) note.style.display = vs.isHost ? 'none' : 'block';
+  const nextBtn = document.getElementById('vsNextBtn');
+  const waitHost = document.getElementById('vsWaitHost');
+  if(nextBtn) nextBtn.style.display = vs.isHost ? 'block' : 'none';
+  if(waitHost) waitHost.style.display = vs.isHost ? 'none' : 'block';
+}
+
+function vsShareCode(){
+  const text = `フラッシュ会計で対戦しよう！\nルームコード: ${vs.code}\n${location.origin}`;
+  if(navigator.share){ navigator.share({title:'フラッシュ対戦',text}); }
+  else navigator.clipboard.writeText(text).then(()=>showToast('コピーしました'));
+}
+
+function vsOpenLion(){
+  // 待合室の暇つぶし（記録は残さない）
+  gameGroupId = null; gameNickname = null;
+  document.getElementById('gameOverlay').classList.remove('hidden');
+  document.getElementById('gameTitle').textContent = 'LION RUN';
+  document.getElementById('gameSetup').style.display='none';
+  document.getElementById('tapScreen').style.display='none';
+  document.getElementById('gameScreen').style.display='flex';
+  document.getElementById('gameOverMsg').style.display='none';
+  document.getElementById('jumpBtn').style.display='block';
+  initGame();
+}
+
+async function vsStartPractice(){
+  try{
+    const r = await fetch('/api/room?action=practice',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({code:vs.code,playerId:vs.playerId})});
+    const d = await r.json();
+    if(d.error) showToast(d.error);
+  }catch(e){ showToast('開始に失敗しました'); }
+}
+
+function vsOnSetStart(d){
+  // 待合室のライオンランが開いていたら閉じる
+  if(gameLoop){ clearInterval(gameLoop); gameLoop=null; }
+  document.getElementById('gameOverlay').classList.add('hidden');
+
+  vs.submitted = false; vs.answer = ''; vs.lastSetNo = d.setNo;
+  document.getElementById('vsSetLabel').textContent =
+    d.practice ? '練習' : `${d.setNo} / ${d.totalSets} セット`;
+  vsShow('vsPlaying');
+  const nameEl = document.getElementById('vsFlashName');
+  const prog = document.getElementById('vsProgress');
+
+  const wait = Math.max(0, d.startAt - Date.now());
+  let count = 3;
+  nameEl.style.visibility='visible';
+  nameEl.textContent = d.practice ? '練習スタート' : `${d.label}`;
+  prog.textContent = 'まもなく開始...';
+
+  setTimeout(()=>{
+    let idx = 0;
+    const showNext = ()=>{
+      if(idx >= d.items.length){ vsStartAnswer(d); return; }
+      prog.textContent = `${idx+1} / ${d.items.length}`;
+      nameEl.textContent = d.items[idx];
+      nameEl.style.visibility = 'visible';
+      idx++;
+      const showTime = Math.max(d.speed*0.7, 400);
+      const blank = Math.max(d.speed - showTime, 150);
+      vs.flashTimer = setTimeout(()=>{
+        nameEl.style.visibility = 'hidden';
+        vs.flashTimer = setTimeout(showNext, blank);
+      }, showTime);
+    };
+    showNext();
+  }, wait);
+}
+
+function vsStartAnswer(d){
+  vsShow('vsAnswering');
+  vs.answer = ''; vs.submitted = false;
+  vsUpdateAnswer();
+  document.getElementById('vsAnsweredCount').textContent = '';
+  vs.answerDeadline = Date.now() + d.answerSec*1000;
+  clearInterval(vs.answerTimer);
+  vs.answerTimer = setInterval(()=>{
+    const left = Math.max(0, vs.answerDeadline - Date.now());
+    document.getElementById('vsCountdown').textContent = (left/1000).toFixed(1) + 's';
+    if(left <= 0){
+      clearInterval(vs.answerTimer);
+      if(!vs.submitted) vsSubmit(true);
+      else if(vs.isHost) fetch('/api/room?action=finish',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:vs.code})});
+    }
+  }, 100);
+}
+
+function vsNum(k){
+  if(vs.submitted) return;
+  if(k==='clear') vs.answer='';
+  else if(k==='back') vs.answer = vs.answer.slice(0,-1);
+  else if(vs.answer.length < 6) vs.answer += k;
+  vsUpdateAnswer();
+}
+function vsUpdateAnswer(){
+  const el = document.getElementById('vsAnswerDisplay');
+  if(el) el.textContent = '¥' + (parseInt(vs.answer||'0')).toLocaleString();
+}
+
+async function vsSubmit(auto){
+  if(vs.submitted) return;
+  vs.submitted = true;
+  clearInterval(vs.answerTimer);
+  try{
+    await fetch('/api/room?action=answer',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({code:vs.code,playerId:vs.playerId,value:parseInt(vs.answer||'0')})});
+    if(!auto) showToast('回答しました');
+  }catch(e){ showToast('送信に失敗しました'); }
+}
+
+function vsOnSetResult(d){
+  clearTimeout(vs.flashTimer); clearInterval(vs.answerTimer);
+  vsShow('vsResult');
+  document.getElementById('vsResultTitle').innerHTML = d.practice
+    ? '<div style="font-family:\'Press Start 2P\',monospace;font-size:11px;color:var(--accent4)">PRACTICE</div>'
+    : `<div style="font-family:'Press Start 2P',monospace;font-size:11px;color:var(--accent4)">SET ${d.setNo}</div>`;
+  document.getElementById('vsCorrectTotal').textContent = '¥' + d.total.toLocaleString();
+  document.getElementById('vsResultList').innerHTML = (d.results||[])
+    .sort((a,b)=>(b.correct-a.correct)||(a.gap-b.gap))
+    .map(r=>`<div class="vs-res-row">
+      <span style="flex:1">${esc(r.name)}</span>
+      <span class="${r.correct?'vs-res-ok':'vs-res-ng'}">${r.answer===null?'無回答':'¥'+r.answer.toLocaleString()}</span>
+      <span class="${r.correct?'vs-res-ok':'vs-res-ng'}">${r.correct?'✓':'差'+r.gap.toLocaleString()}</span>
+    </div>`).join('');
+
+  const st = document.getElementById('vsStandings');
+  st.innerHTML = [...(d.players||[])].sort((a,b)=>(b.sets-a.sets)||(a.diff-b.diff))
+    .map(p=>`<div class="vs-res-row"><span style="flex:1">${esc(p.name)}</span><span class="vs-badge">${p.sets}セット</span><span class="vs-sub">差${p.diff.toLocaleString()}</span></div>`).join('');
+
+  const nextBtn = document.getElementById('vsNextBtn');
+  if(d.practice){
+    // 練習後は「準備OK」
+    nextBtn.textContent = '準備OK ▶';
+    nextBtn.onclick = vsReady;
+    nextBtn.style.display = 'block';
+    document.getElementById('vsWaitHost').textContent = '全員の準備が整うと本戦が始まります';
+    document.getElementById('vsWaitHost').style.display = 'block';
+  } else if(d.isLast){
+    nextBtn.textContent = '最終結果へ ▶';
+    nextBtn.onclick = vsNext;
+    nextBtn.style.display = vs.isHost ? 'block' : 'none';
+    document.getElementById('vsWaitHost').style.display = vs.isHost ? 'none' : 'block';
+  } else {
+    nextBtn.textContent = '次のセットへ ▶';
+    nextBtn.onclick = vsNext;
+    nextBtn.style.display = vs.isHost ? 'block' : 'none';
+    document.getElementById('vsWaitHost').textContent = 'ホストの進行を待っています...';
+    document.getElementById('vsWaitHost').style.display = vs.isHost ? 'none' : 'block';
+  }
+}
+
+async function vsReady(){
+  document.getElementById('vsNextBtn').style.display = 'none';
+  try{
+    await fetch('/api/room?action=ready',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({code:vs.code,playerId:vs.playerId})});
+  }catch(e){ showToast('送信に失敗しました'); }
+}
+
+async function vsNext(){
+  try{
+    const r = await fetch('/api/room?action=next',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({code:vs.code,playerId:vs.playerId})});
+    const d = await r.json();
+    if(d.error) showToast(d.error);
+  }catch(e){ showToast('進行に失敗しました'); }
+}
+
+function vsOnGameEnd(d){
+  vsShow('vsFinal');
+  const medals = ['🥇','🥈','🥉'];
+  document.getElementById('vsFinalList').innerHTML = (d.ranking||[]).map((p,i)=>`
+    <div class="vs-res-row">
+      <span class="vs-badge">${medals[i]||(i+1)}</span>
+      <span style="flex:1">${esc(p.name)}</span>
+      <span class="vs-res-ok">${p.sets}セット</span>
+      <span class="vs-sub">差${p.diff.toLocaleString()}</span>
+    </div>`).join('');
 }
 
 // ===== ユーティリティ =====
