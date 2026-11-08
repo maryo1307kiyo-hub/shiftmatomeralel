@@ -31,22 +31,26 @@ export default async function handler(req, res) {
     // --- 回答を保存 ---
     if (req.method === 'POST' && action === 'submit') {
       const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
-      const { groupId, date, name, crowd, food, alcohol, eventName, note } = body;
+      const { groupId, date, uid, name, worked, crowd, food, alcohol, eventName, note } = body;
       if (!groupId || !date) return res.status(400).json({ error: 'groupId and date required' });
 
-      // 日付ごとに回答を蓄積（同じ人が再回答したら上書き）
+      // 日付ごとに回答を蓄積（同じ端末が再回答したら上書き）
       const key = `survey:${groupId}:${date}`;
       const list = (await rGet(key)) || [];
       const entry = {
-        name: name || '匿名',
-        crowd: crowd || null,
-        food: food || null,
+        uid: uid || null,
+        name: name || null,          // シフト申請を設定済みの人だけ名前が入る
+        worked: worked || null,      // 入ってた / 入ってない
+        crowd: crowd ?? null,        // 1〜5
+        food: food ?? null,          // 1〜5
         alcohol: alcohol || null,
         eventName: eventName || null,
         note: note || null,
         submittedAt: new Date().toISOString(),
       };
-      const idx = list.findIndex(x => x && x.name === entry.name);
+      const idx = uid
+        ? list.findIndex(x => x && x.uid === uid)
+        : list.findIndex(x => x && name && x.name === name);
       if (idx >= 0) list[idx] = entry; else list.push(entry);
       await rSet(key, list);
 
@@ -64,11 +68,11 @@ export default async function handler(req, res) {
 
     // --- ある日付の回答状況（自分が回答済みかの確認用） ---
     if (action === 'status') {
-      const { groupId, date, name } = req.query;
+      const { groupId, date, uid } = req.query;
       if (!groupId || !date) return res.status(400).json({ error: 'groupId and date required' });
       const list = (await rGet(`survey:${groupId}:${date}`)) || [];
       return res.status(200).json({
-        answered: name ? list.some(x => x && x.name === name) : false,
+        answered: uid ? list.some(x => x && x.uid === uid) : false,
         count: list.length,
       });
     }
