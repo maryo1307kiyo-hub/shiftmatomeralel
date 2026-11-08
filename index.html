@@ -96,7 +96,8 @@
     .date-row{display:flex;align-items:center;padding:7px 0 5px;border-bottom:var(--px) solid #ffffff08;gap:6px}
     .date-tag{font-family:'DotGothic16',monospace;font-size:13px;font-weight:bold;min-width:88px;color:var(--text)}
     .date-tag.sat{color:#5599bb}.date-tag.sun{color:#aa4455}
-    .event-tag{font-size:10px;color:var(--accent4);border:var(--px) solid var(--accent4);padding:1px 5px;margin-left:6px;font-family:'DotGothic16',monospace;}
+    .event-tag{font-size:10px;color:var(--accent4);border:var(--px) solid var(--accent4);padding:1px 5px;margin-left:6px;font-family:'DotGothic16',monospace;display:inline-block;text-decoration:none;cursor:pointer;}
+    .event-tag:active{transform:translate(1px,1px);opacity:.7;}
     .event-tag.sport{color:#55aa77;border-color:#55aa77;}
     .shift-pills{display:flex;flex-wrap:wrap;gap:4px;flex:1}
     .shift-pill{display:flex;align-items:center;gap:4px;padding:2px 6px;border:var(--px) solid;font-size:11px}
@@ -179,6 +180,25 @@
     .vs-res-row{display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--border);font-size:13px}
     .vs-res-ok{color:var(--accent3)}
     .vs-res-ng{color:var(--muted)}
+    /* 現場アンケート */
+    .sv-overlay{position:fixed;inset:0;background:#000000aa;z-index:380;display:flex;align-items:flex-end}
+    .sv-overlay.hidden{display:none}
+    .sv-sheet{background:var(--bg);border-top:var(--px) solid var(--accent4);width:100%;max-height:92vh;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px}
+    .sv-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+    .sv-title{font-family:'Press Start 2P',monospace;font-size:9px;color:var(--accent4);line-height:1.8}
+    .sv-close{background:transparent;border:var(--px) solid var(--muted);color:var(--muted);font-size:14px;width:30px;height:30px;cursor:pointer;flex-shrink:0;line-height:1}
+    .sv-close:active{transform:translate(1px,1px)}
+    .sv-date{font-size:13px;color:var(--text)}
+    .sv-event{font-size:11px;color:var(--accent4);margin-top:2px}
+    .sv-q{font-size:12px;color:var(--muted);margin-bottom:6px}
+    .sv-opts{display:flex;flex-wrap:wrap;gap:6px}
+    .sv-opt{font-family:'DotGothic16',monospace;font-size:13px;padding:8px 12px;background:var(--surface);color:var(--text);border:var(--px) solid var(--border);cursor:pointer}
+    .sv-opt.sel{border-color:var(--accent4);background:#cc883322;color:var(--accent4);font-weight:bold}
+    .sv-opt:active{transform:translate(1px,1px)}
+    .sv-scale{align-items:center;flex-wrap:nowrap;gap:4px}
+    .sv-end{font-size:10px;color:var(--muted);white-space:nowrap;flex-shrink:0}
+    .sv-num{flex:1;min-width:0;padding:10px 0;text-align:center;font-family:'Press Start 2P',monospace;font-size:12px}
+    .sv-skip{font-size:11px;color:var(--muted);text-align:center;text-decoration:underline;cursor:pointer;padding:4px}
     /* フラッシュ会計 */
     .flash-overlay{position:fixed;inset:0;background:var(--bg);z-index:350;display:flex;flex-direction:column}
     .flash-overlay.hidden{display:none}
@@ -499,6 +519,36 @@
   </div>
 </div>
 
+<!-- 現場アンケート -->
+<div class="sv-overlay hidden" id="svOverlay">
+  <div class="sv-sheet">
+    <div class="sv-head">
+      <div>
+        <div class="sv-title">現場アンケート</div>
+        <div class="sv-date" id="svDate"></div>
+        <div class="sv-event" id="svEvent"></div>
+      </div>
+      <button class="sv-close" onclick="svSkip()" title="スキップ">✕</button>
+    </div>
+
+    <div>
+      <div class="sv-q">お客さんの混み具合は？<span style="opacity:.7">（1〜5）</span></div>
+      <div class="sv-opts" id="svCrowd"></div>
+    </div>
+    <div>
+      <div class="sv-q">フードの余り具合は？<span style="opacity:.7">（1〜5）</span></div>
+      <div class="sv-opts" id="svFood"></div>
+    </div>
+    <div>
+      <div class="sv-q">アルコール販売は？</div>
+      <div class="sv-opts" id="svAlcohol"></div>
+    </div>
+
+    <button class="btn-px btn-primary" style="background:var(--accent4);" onclick="svSubmit()">送信する ▶</button>
+    <div class="sv-skip" onclick="svSkip()">今回はスキップ</div>
+  </div>
+</div>
+
 <!-- フラッシュ会計オーバーレイ -->
 <div class="flash-overlay hidden" id="flashOverlay">
   <div class="flash-header">
@@ -792,8 +842,10 @@ async function loadEvents(results){
         }
       }catch(e){}
     }
+    svEventMap = evMap;
     applyEventTags(evMap);
     showTodayEvent(evMap);
+    setTimeout(svMaybeAsk, 2500);
   }catch(e){
     // イベント取得が全体的に失敗してもシフト表示には何も影響しない
   }
@@ -808,7 +860,10 @@ function applyEventTags(evMap){
       const cls=sportTypes.includes(ev.type)?' sport':'';
       const existing=tagEl.querySelector('.event-tag');
       if(existing) existing.remove();
-      tagEl.insertAdjacentHTML('beforeend', `<span class="event-tag${cls}">${esc(ev.name.slice(0,15))}</span>`);
+      // 公式ページが分かればリンク化（無ければイベント名で検索に飛ばす）
+      const link = ev.url || `https://www.google.com/search?q=${encodeURIComponent(ev.name + ' 横浜アリーナ')}`;
+      tagEl.insertAdjacentHTML('beforeend',
+        `<a class="event-tag${cls}" href="${esc(link)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${esc(ev.name.slice(0,15))}</a>`);
     }
   });
 }
@@ -828,7 +883,8 @@ function showTodayEvent(evMap){
   }
   if(ev){
     el.style.display='flex';
-    el.innerHTML=`<span style="font-family:'Press Start 2P',monospace;font-size:7px;color:var(--accent4);">TODAY</span><span style="color:var(--text);">🎪 ${esc(ev.name)}</span><span style="font-size:11px;color:var(--muted);">${esc(ev.type||'')}</span>`;
+    const link = ev.url || `https://www.google.com/search?q=${encodeURIComponent(ev.name + ' 横浜アリーナ')}`;
+    el.innerHTML=`<span style="font-family:'Press Start 2P',monospace;font-size:7px;color:var(--accent4);">TODAY</span><a href="${esc(link)}" target="_blank" rel="noopener noreferrer" style="color:var(--text);text-decoration:underline;">🎪 ${esc(ev.name)}</a><span style="font-size:11px;color:var(--muted);">${esc(ev.type||'')}</span>`;
   } else {
     el.style.display='none';
   }
@@ -2357,6 +2413,138 @@ function vsOnGameEnd(d){
       <span class="vs-res-ok">${p.sets}セット</span>
       <span class="vs-sub">差${p.diff.toLocaleString()}</span>
     </div>`).join('');
+}
+
+
+// ===== 現場アンケート（不定期ランダム） =====
+const SV_OPTIONS = {
+  crowd:   { scale: true, min: 'ガラガラ', max: '満員' },
+  food:    { scale: true, min: '完売',     max: 'だいぶ余った' },
+  alcohol: { scale: false, opts: ['あり', 'なし', 'わからない'] },
+};
+const SV_CHANCE = 0.4;            // 条件を満たした時に出る確率
+const SV_LOOKBACK_DAYS = 14;      // 何日前までのシフトを対象にするか
+
+let svState = { date: null, eventName: null, name: null, answers: {} };
+let svEventMap = {};              // loadEvents から受け取る
+
+function svKey(date){ return 'survey_done_' + groupId + '_' + date; }
+
+// 対象になる日付を探す：自分が入った過去のシフトで、まだ答えてない日
+function svFindTargetDate(){
+  const myName = getMyApplyName();
+  if(!myName || !lastResults) return null;
+  const me = lastResults.find(r => r.name === myName);
+  if(!me || !(me.shifts||[]).length) return null;
+
+  const today = new Date(Date.now() + 9*60*60*1000).toISOString().slice(0,10);
+  const limit = new Date(Date.now() + 9*60*60*1000 - SV_LOOKBACK_DAYS*24*60*60*1000)
+                  .toISOString().slice(0,10);
+
+  // 新しい日付から順に、未回答のものを探す
+  const past = (me.shifts||[])
+    .map(s => s.date)
+    .filter(d => d < today && d >= limit)
+    .sort().reverse();
+
+  for(const d of past){
+    try{ if(localStorage.getItem(svKey(d))) continue; }catch(e){}
+    return { date: d, name: myName };
+  }
+  return null;
+}
+
+// アプリ起動時などに呼ぶ。条件＋確率を満たした時だけ表示
+function svMaybeAsk(){
+  try{
+    if(document.getElementById('svOverlay') &&
+       !document.getElementById('svOverlay').classList.contains('hidden')) return;
+    // 1日1回まで
+    const today = new Date(Date.now() + 9*60*60*1000).toISOString().slice(0,10);
+    if(localStorage.getItem('survey_lastAsk_' + groupId) === today) return;
+
+    const target = svFindTargetDate();
+    if(!target) return;
+    if(Math.random() > SV_CHANCE) return;
+
+    localStorage.setItem('survey_lastAsk_' + groupId, today);
+    svOpen(target.date, target.name);
+  }catch(e){}
+}
+
+function svOpen(date, name){
+  const ev = svEventMap[date];
+  svState = { date, name, eventName: ev ? ev.name : null, answers: {} };
+
+  const dt = new Date(date + 'T00:00:00');
+  const dow = ['日','月','火','水','木','金','土'][dt.getDay()];
+  document.getElementById('svDate').textContent =
+    `${dt.getMonth()+1}/${dt.getDate()}（${dow}）の現場について`;
+  document.getElementById('svEvent').textContent = ev ? `🎪 ${ev.name}` : '';
+
+  for(const [field, cfg] of Object.entries(SV_OPTIONS)){
+    const box = document.getElementById('sv' + field[0].toUpperCase() + field.slice(1));
+    if(!box) continue;
+    if(cfg.scale){
+      box.className = 'sv-opts sv-scale';
+      box.innerHTML =
+        `<span class="sv-end">${esc(cfg.min)}</span>` +
+        [1,2,3,4,5].map(n =>
+          `<button class="sv-opt sv-num" onclick="svPick('${field}',${n},this)">${n}</button>`
+        ).join('') +
+        `<span class="sv-end">${esc(cfg.max)}</span>`;
+    } else {
+      box.className = 'sv-opts';
+      box.innerHTML = cfg.opts.map(o =>
+        `<button class="sv-opt" onclick="svPick('${field}','${esc(o)}',this)">${esc(o)}</button>`
+      ).join('');
+    }
+  }
+  document.getElementById('svOverlay').classList.remove('hidden');
+}
+
+function svPick(field, value, el){
+  svState.answers[field] = value;
+  const box = el.parentElement;
+  box.querySelectorAll('.sv-opt').forEach(b => b.classList.remove('sel'));
+  el.classList.add('sel');
+}
+
+function svClose(){
+  document.getElementById('svOverlay').classList.add('hidden');
+}
+
+// ✕ / スキップ：その日はもう聞かない
+function svSkip(){
+  try{ if(svState.date) localStorage.setItem(svKey(svState.date), 'skipped'); }catch(e){}
+  svClose();
+}
+
+async function svSubmit(){
+  const a = svState.answers;
+  if(!a.crowd && !a.food && !a.alcohol){
+    showToast('ひとつ以上選んでください');
+    return;
+  }
+  try{
+    await fetch('/api/survey?action=submit', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        groupId,
+        date: svState.date,
+        name: svState.name,
+        eventName: svState.eventName,
+        crowd: a.crowd || null,
+        food: a.food || null,
+        alcohol: a.alcohol || null,
+      })
+    });
+    try{ localStorage.setItem(svKey(svState.date), 'answered'); }catch(e){}
+    svClose();
+    showToast('ありがとう！記録しました');
+  }catch(e){
+    showToast('送信に失敗しました');
+  }
 }
 
 // ===== ユーティリティ =====
