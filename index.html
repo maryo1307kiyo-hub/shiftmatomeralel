@@ -532,19 +532,26 @@
     </div>
 
     <div>
-      <div class="sv-q">お客さんの混み具合は？<span style="opacity:.7">（1〜5）</span></div>
-      <div class="sv-opts" id="svCrowd"></div>
-    </div>
-    <div>
-      <div class="sv-q">フードの余り具合は？<span style="opacity:.7">（1〜5）</span></div>
-      <div class="sv-opts" id="svFood"></div>
-    </div>
-    <div>
-      <div class="sv-q">アルコール販売は？</div>
-      <div class="sv-opts" id="svAlcohol"></div>
+      <div class="sv-q">この日のシフトは？</div>
+      <div class="sv-opts" id="svWorked"></div>
     </div>
 
-    <button class="btn-px btn-primary" style="background:var(--accent4);" onclick="svSubmit()">送信する ▶</button>
+    <div id="svDetail" style="display:none;flex-direction:column;gap:12px;">
+      <div>
+        <div class="sv-q">お客さんの混み具合<span style="opacity:.7">（1〜5）</span></div>
+        <div class="sv-opts sv-scale" id="svCrowd"></div>
+      </div>
+      <div>
+        <div class="sv-q">フードの余り具合<span style="opacity:.7">（1〜5）</span></div>
+        <div class="sv-opts sv-scale" id="svFood"></div>
+      </div>
+      <div>
+        <div class="sv-q">アルコール販売</div>
+        <div class="sv-opts" id="svAlcohol"></div>
+      </div>
+    </div>
+
+    <button class="btn-px btn-primary" id="svSend" style="background:var(--accent4);display:none;" onclick="svSubmit()">送信する ▶</button>
     <div class="sv-skip" onclick="svSkip()">今回はスキップ</div>
   </div>
 </div>
@@ -2416,103 +2423,134 @@ function vsOnGameEnd(d){
 }
 
 
-// ===== 現場アンケート（不定期ランダム） =====
-const SV_OPTIONS = {
-  crowd:   { scale: true, min: 'ガラガラ', max: '満員' },
-  food:    { scale: true, min: '完売',     max: 'だいぶ余った' },
-  alcohol: { scale: false, opts: ['あり', 'なし', 'わからない'] },
+// ===== 現場アンケート（不定期ランダム・1画面完結） =====
+const SV_SCALES = {
+  crowd: { min: 'ガラガラ', max: '満員' },
+  food:  { min: '完売',     max: 'だいぶ余った' },
 };
-const SV_CHANCE = 0.4;            // 条件を満たした時に出る確率
-const SV_LOOKBACK_DAYS = 14;      // 何日前までのシフトを対象にするか
+const SV_CHANCE = 0.4;        // 条件を満たした時に出る確率
+const SV_WINDOW_DAYS = 14;    // シフト終了〜何日後までを対象にするか
 
-let svState = { date: null, eventName: null, name: null, answers: {} };
-let svEventMap = {};              // loadEvents から受け取る
+let svState = { date: null, eventName: null, worked: null, answers: {} };
+let svEventMap = {};
 
 function svKey(date){ return 'survey_done_' + groupId + '_' + date; }
 
-// 対象になる日付を探す：自分が入った過去のシフトで、まだ答えてない日
-function svFindTargetDate(){
-  const myName = getMyApplyName();
-  if(!myName || !lastResults) return null;
-  const me = lastResults.find(r => r.name === myName);
-  if(!me || !(me.shifts||[]).length) return null;
-
-  const today = new Date(Date.now() + 9*60*60*1000).toISOString().slice(0,10);
-  const limit = new Date(Date.now() + 9*60*60*1000 - SV_LOOKBACK_DAYS*24*60*60*1000)
-                  .toISOString().slice(0,10);
-
-  // 新しい日付から順に、未回答のものを探す
-  const past = (me.shifts||[])
-    .map(s => s.date)
-    .filter(d => d < today && d >= limit)
-    .sort().reverse();
-
-  for(const d of past){
-    try{ if(localStorage.getItem(svKey(d))) continue; }catch(e){}
-    return { date: d, name: myName };
-  }
-  return null;
+// 端末ごとの匿名ID（同じ人の二重回答を防ぐだけに使う）
+function svUid(){
+  let id = localStorage.getItem('survey_uid');
+  if(!id){ id = 'u_' + Math.random().toString(36).slice(2,10); localStorage.setItem('survey_uid', id); }
+  return id;
 }
 
-// アプリ起動時などに呼ぶ。条件＋確率を満たした時だけ表示
+// 対象日を探す：グループの誰かがシフトに入った日で、
+// 「その日の最終終了時刻を過ぎている」かつ「14日以内」かつ「未回答」
+function svFindTargetDate(){
+  if(!lastResults) return null;
+  const nowJst = new Date(Date.now() + 9*60*60*1000);
+  const todayStr = nowJst.toISOString().slice(0,10);
+  const nowMin = nowJst.getUTCHours()*60 + nowJst.getUTCMinutes();
+  const limit = new Date(nowJst.getTime() - SV_WINDOW_DAYS*24*60*60*1000).toISOString().slice(0,10);
+
+  // 日付ごとに「その日の最も遅い終了時刻」を集める
+  const endByDate = {};
+  for(const r of lastResults){
+    for(const sh of (r.shifts || [])){
+      if(!sh || !sh.date || !sh.end) continue;
+      const [h,m] = String(sh.end).split(':').map(Number);
+      if(isNaN(h)) continue;
+      const mins = h*60 + (m||0);
+      if(endByDate[sh.date] === undefined || mins > endByDate[sh.date]) endByDate[sh.date] = mins;
+    }
+  }
+
+  const cands = Object.keys(endByDate)
+    .filter(d => {
+      if(d > todayStr) return false;                    // 未来は対象外
+      if(d < limit) return false;                        // 14日より前は締め切り
+      if(d === todayStr && nowMin < endByDate[d]) return false; // 当日はシフト終了後のみ
+      try{ if(localStorage.getItem(svKey(d))) return false; }catch(e){}
+      return true;
+    })
+    .sort().reverse();
+
+  return cands.length ? cands[0] : null;
+}
+
 function svMaybeAsk(){
   try{
-    if(document.getElementById('svOverlay') &&
-       !document.getElementById('svOverlay').classList.contains('hidden')) return;
-    // 1日1回まで
+    const ov = document.getElementById('svOverlay');
+    if(!ov || !ov.classList.contains('hidden')) return;
     const today = new Date(Date.now() + 9*60*60*1000).toISOString().slice(0,10);
     if(localStorage.getItem('survey_lastAsk_' + groupId) === today) return;
 
-    const target = svFindTargetDate();
-    if(!target) return;
+    const date = svFindTargetDate();
+    if(!date) return;
     if(Math.random() > SV_CHANCE) return;
 
     localStorage.setItem('survey_lastAsk_' + groupId, today);
-    svOpen(target.date, target.name);
+    svOpen(date);
   }catch(e){}
 }
 
-function svOpen(date, name){
+function svOpen(date){
   const ev = svEventMap[date];
-  svState = { date, name, eventName: ev ? ev.name : null, answers: {} };
+  svState = { date, eventName: ev ? ev.name : null, worked: null, answers: {} };
 
   const dt = new Date(date + 'T00:00:00');
   const dow = ['日','月','火','水','木','金','土'][dt.getDay()];
-  document.getElementById('svDate').textContent =
-    `${dt.getMonth()+1}/${dt.getDate()}（${dow}）の現場について`;
+  document.getElementById('svDate').textContent = `${dt.getMonth()+1}/${dt.getDate()}（${dow}）の現場`;
   document.getElementById('svEvent').textContent = ev ? `🎪 ${ev.name}` : '';
 
-  for(const [field, cfg] of Object.entries(SV_OPTIONS)){
+  // 出勤したか
+  document.getElementById('svWorked').innerHTML =
+    ['入ってた','入ってない'].map(o =>
+      `<button class="sv-opt" onclick="svPickWorked('${o}',this)">${o}</button>`
+    ).join('');
+
+  // 1〜5スケール
+  for(const [field, cfg] of Object.entries(SV_SCALES)){
     const box = document.getElementById('sv' + field[0].toUpperCase() + field.slice(1));
     if(!box) continue;
-    if(cfg.scale){
-      box.className = 'sv-opts sv-scale';
-      box.innerHTML =
-        `<span class="sv-end">${esc(cfg.min)}</span>` +
-        [1,2,3,4,5].map(n =>
-          `<button class="sv-opt sv-num" onclick="svPick('${field}',${n},this)">${n}</button>`
-        ).join('') +
-        `<span class="sv-end">${esc(cfg.max)}</span>`;
-    } else {
-      box.className = 'sv-opts';
-      box.innerHTML = cfg.opts.map(o =>
-        `<button class="sv-opt" onclick="svPick('${field}','${esc(o)}',this)">${esc(o)}</button>`
-      ).join('');
-    }
+    box.innerHTML =
+      `<span class="sv-end">${esc(cfg.min)}</span>` +
+      [1,2,3,4,5].map(n => `<button class="sv-opt sv-num" onclick="svPick('${field}',${n},this)">${n}</button>`).join('') +
+      `<span class="sv-end">${esc(cfg.max)}</span>`;
   }
+
+  // アルコール
+  document.getElementById('svAlcohol').innerHTML =
+    ['あり','なし','わからない'].map(o =>
+      `<button class="sv-opt" onclick="svPick('alcohol','${o}',this)">${o}</button>`
+    ).join('');
+
+  document.getElementById('svDetail').style.display = 'none';
+  document.getElementById('svSend').style.display = 'none';
   document.getElementById('svOverlay').classList.remove('hidden');
+}
+
+// 「入ってた／入ってない」を選んだとき
+function svPickWorked(value, el){
+  svState.worked = value;
+  el.parentElement.querySelectorAll('.sv-opt').forEach(b => b.classList.remove('sel'));
+  el.classList.add('sel');
+
+  if(value === '入ってない'){
+    // 残りは聞かずにその場で記録して閉じる
+    svSend(false);
+  } else {
+    document.getElementById('svDetail').style.display = 'flex';
+    document.getElementById('svSend').style.display = 'block';
+  }
 }
 
 function svPick(field, value, el){
   svState.answers[field] = value;
-  const box = el.parentElement;
-  box.querySelectorAll('.sv-opt').forEach(b => b.classList.remove('sel'));
+  el.parentElement.querySelectorAll('.sv-opt').forEach(b => b.classList.remove('sel'));
   el.classList.add('sel');
 }
 
-function svClose(){
-  document.getElementById('svOverlay').classList.add('hidden');
-}
+function svClose(){ document.getElementById('svOverlay').classList.add('hidden'); }
 
 // ✕ / スキップ：その日はもう聞かない
 function svSkip(){
@@ -2520,29 +2558,34 @@ function svSkip(){
   svClose();
 }
 
-async function svSubmit(){
+function svSubmit(){
   const a = svState.answers;
-  if(!a.crowd && !a.food && !a.alcohol){
-    showToast('ひとつ以上選んでください');
-    return;
-  }
+  if(!a.crowd && !a.food && !a.alcohol){ showToast('ひとつ以上選んでください'); return; }
+  svSend(true);
+}
+
+async function svSend(withDetail){
+  const a = svState.answers;
   try{
     await fetch('/api/survey?action=submit', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({
         groupId,
+        uid: svUid(),
         date: svState.date,
-        name: svState.name,
+        name: (typeof getMyApplyName === 'function' ? getMyApplyName() : null) || null,
         eventName: svState.eventName,
-        crowd: a.crowd || null,
-        food: a.food || null,
-        alcohol: a.alcohol || null,
+        worked: svState.worked,
+        crowd:   withDetail ? (a.crowd   || null) : null,
+        food:    withDetail ? (a.food    || null) : null,
+        alcohol: withDetail ? (a.alcohol || null) : null,
       })
     });
     try{ localStorage.setItem(svKey(svState.date), 'answered'); }catch(e){}
     svClose();
     showToast('ありがとう！記録しました');
   }catch(e){
+    svClose();
     showToast('送信に失敗しました');
   }
 }
