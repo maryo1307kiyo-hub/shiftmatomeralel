@@ -58,9 +58,34 @@ function parseEvents(html) {
     events.push({
       date: `${year}-${mo}-${day}`,
       type,
-      name
+      name,
+      url: findEventUrl(html, `${year}.${mo}.${day}`, name),
     });
   }
 
   return events;
+}
+
+// 元HTMLから、その日付の近くにあるイベント詳細ページのリンクを探す
+function findEventUrl(html, dateStr, name) {
+  const BASE = 'https://www.yokohama-arena.co.jp';
+  try {
+    // 1) 日付文字列の前後を見て /event/detail/ へのリンクを拾う
+    let idx = html.indexOf(dateStr);
+    while (idx !== -1) {
+      const win = html.slice(Math.max(0, idx - 1500), idx + 2500);
+      const m = win.match(/href=["']([^"']*\/event\/detail\/[^"']+)["']/);
+      if (m) return m[1].startsWith('http') ? m[1] : BASE + (m[1].startsWith('/') ? m[1] : '/' + m[1]);
+      idx = html.indexOf(dateStr, idx + 1);
+    }
+
+    // 2) イベント名の近くを見る（日付とリンクが離れている構造の保険）
+    const nameIdx = html.indexOf(name.slice(0, 12));
+    if (nameIdx !== -1) {
+      const win = html.slice(Math.max(0, nameIdx - 2000), nameIdx + 2000);
+      const m = win.match(/href=["']([^"']*\/event\/detail\/[^"']+)["']/);
+      if (m) return m[1].startsWith('http') ? m[1] : BASE + (m[1].startsWith('/') ? m[1] : '/' + m[1]);
+    }
+  } catch(e) {}
+  return null;
 }
