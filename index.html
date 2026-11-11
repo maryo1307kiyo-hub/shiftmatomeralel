@@ -1,306 +1,2874 @@
-// api/get-shifts.js - キャッシュ付きシフト取得API
-
-export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
-
-  const UPSTASH_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
-  const UPSTASH_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
-
-  if (!UPSTASH_URL || !UPSTASH_TOKEN) {
-    return res.status(500).json({ error: 'DB not configured' });
-  }
-
-  async function redisGet(key) {
-    const r = await fetch(`${UPSTASH_URL}/get/${encodeURIComponent(key)}`, {
-      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}` }
-    });
-    const d = await r.json();
-    return d.result ? JSON.parse(d.result) : null;
-  }
-
-  async function redisSet(key, value) {
-    await fetch(`${UPSTASH_URL}/set/${encodeURIComponent(key)}`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(value)
-    });
-  }
-
-  const { groupId, force, debug } = req.query;
-  if (!groupId) return res.status(400).json({ error: 'groupId required' });
-
-  const cacheKey = `shifts:${groupId}`;
-  const pendingCacheKey = `pending:${groupId}`;
-
-  // デバッグ：Redisの生キャッシュを覗く（復元可否の判定用）
-  if (debug === 'keys') {
-    const shiftsCache = await redisGet(cacheKey);
-    const pendingCache = await redisGet(pendingCacheKey);
-    return res.status(200).json({
-      shiftsCache_cachedAt: shiftsCache?.cachedAt || null,
-      shiftsCache_hasData: shiftsCache?.results?.some(r => (r.shifts||[]).length > 0) || false,
-      pendingCache: pendingCache || null,
-    });
-  }
-
-  // ===== SWRモード：キャッシュを鮮度無視で即返す（初回表示用） =====
-  // キャッシュが無い場合のみ下の通常フローに落ちて実取得する
-  if (req.query.mode === 'cache') {
-    const cached = await redisGet(cacheKey);
-    if (cached) {
-      return res.status(200).json({ ...cached, fromCache: true });
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>しふとまとめれ～る</title>
+  <link href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Press+Start+2P&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg:#0f0f22;--surface:#181830;--border:#2e2e50;
+      --accent:#5588cc;--accent2:#cc4455;--accent3:#44aa66;--accent4:#cc8833;
+      --text:#c8c8e0;--muted:#444466;--px:2px;
     }
-    // キャッシュ無し→通常取得へフォールスルー
-  }
+    *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+    html,body{min-height:100vh;font-family:'DotGothic16',monospace;background:var(--bg);color:var(--text);font-size:14px}
 
-  // 強制更新でない場合はキャッシュを確認
-  if (force !== '1') {
-    const cached = await redisGet(cacheKey);
-    if (cached && !shouldRefresh(cached.cachedAt)) {
-      return res.status(200).json({ ...cached, fromCache: true });
-    }
-  }
+    body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(circle,#ffffff06 1px,transparent 1px);background-size:16px 16px;pointer-events:none;z-index:0}
+    *{position:relative;z-index:1}
 
-  // メンバーリスト取得
-  const membersKey = `group:${groupId}`;
-  const members = await redisGet(membersKey);
-  if (!members || members.length === 0) {
-    return res.status(200).json({ results: [], cachedAt: null });
-  }
+    /* ヘッダー */
+    .header{background:var(--surface);border-bottom:var(--px) solid var(--accent);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+    .logo{font-family:'Press Start 2P',monospace;font-size:8px;color:var(--accent);letter-spacing:.05em}
+    .header-actions{display:flex;gap:8px}
 
-  // 前回の申請シフトキャッシュを取得（申請ページが消えた期間のバックアップ）
-  const prevPendingCache = await redisGet(pendingCacheKey) || {};
-  // 個別メンバーの取得失敗時に使う「前回の正常データ」
-  const prevShiftsCache = await redisGet(cacheKey);
-  const prevByName = {};
-  for (const r of (prevShiftsCache?.results || [])) {
-    if (r && r.name && (r.shifts || []).length > 0) prevByName[r.name] = r;
-  }
+    /* ボタン */
+    .btn-px{font-family:'DotGothic16',monospace;font-size:13px;padding:6px 12px;border:none;cursor:pointer;transition:transform .08s}
+    .btn-px:active{transform:translate(2px,2px)}
+    .btn-px:disabled{opacity:.35}
+    .btn-primary{background:var(--accent);color:#fff;box-shadow:3px 3px 0 #2a4477;width:100%;padding:10px}
+    .btn-primary:active{box-shadow:1px 1px 0 #2a4477}
+    .btn-ghost{background:transparent;color:var(--accent);border:var(--px) solid var(--accent);box-shadow:3px 3px 0 #2a4477}
+    .btn-ghost:active{box-shadow:1px 1px 0 #2a4477}
+    .btn-sm{width:auto;padding:5px 11px;font-size:12px}
+    .btn-red{background:transparent;color:var(--accent2);border:var(--px) solid var(--accent2);box-shadow:3px 3px 0 #661122;font-size:11px;padding:4px 10px}
+    .btn-red:active{box-shadow:1px 1px 0 #661122}
 
-  // 全員分のシフトを取得
-  // 同時実行数を制限して取得（ciftr側の同時接続制限対策）
-  const CONCURRENCY = 4;
-  const runLimited = async (items, worker) => {
-    const out = new Array(items.length);
-    let cursor = 0;
-    const runners = Array.from({ length: Math.min(CONCURRENCY, items.length) }, async () => {
-      while (cursor < items.length) {
-        const i = cursor++;
-        out[i] = await worker(items[i], i);
-      }
+    /* タブ */
+    .tabs{display:flex;background:var(--surface);border-bottom:var(--px) solid var(--border);position:sticky;top:45px;z-index:99}
+    .tab{flex:1;text-align:center;padding:10px;font-family:'DotGothic16',monospace;font-size:13px;color:var(--muted);cursor:pointer;border-bottom:calc(var(--px)*2) solid transparent}
+    .tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+
+    .view{display:none}.view.active{display:block}
+    .main{padding-bottom:80px}
+
+    /* グループ画面 */
+    .group-screen{padding:24px 16px;display:flex;flex-direction:column;gap:14px;max-width:380px;margin:0 auto}
+    .screen-title{font-family:'Press Start 2P',monospace;font-size:9px;color:var(--accent);text-align:center;line-height:2;margin-bottom:4px}
+    .px-card{background:var(--surface);border:var(--px) solid var(--border);box-shadow:4px 4px 0 #00000055;padding:14px;display:flex;flex-direction:column;gap:10px}
+    .px-label{font-family:'Press Start 2P',monospace;font-size:7px;color:var(--muted);letter-spacing:.1em}
+    .divider{text-align:center;color:var(--muted);font-size:11px;display:flex;align-items:center;gap:8px}
+    .divider::before,.divider::after{content:'';flex:1;height:var(--px);background:var(--border)}
+
+    /* インプット */
+    input{background:#080814;border:var(--px) solid var(--muted);color:var(--text);font-family:'DotGothic16',monospace;font-size:14px;padding:8px 10px;outline:none;width:100%;-webkit-appearance:none}
+    input:focus{border-color:var(--accent)}
+    input::placeholder{color:var(--muted)}
+
+    /* 設定 */
+    .settings-section{padding:14px;display:flex;flex-direction:column;gap:14px}
+    .section{display:flex;flex-direction:column;gap:8px}
+    .section-label{font-family:'Press Start 2P',monospace;font-size:6px;color:var(--muted);letter-spacing:.12em}
+    .group-info{background:#080814;border:var(--px) solid var(--accent);padding:10px 12px;display:flex;align-items:center;justify-content:space-between;box-shadow:3px 3px 0 #2a4477}
+    .group-id-text{font-family:'Press Start 2P',monospace;font-size:8px;color:var(--accent);letter-spacing:.1em}
+    .member-list{display:flex;flex-direction:column;gap:6px}
+    .member-card.member-error{border-color:var(--accent2)!important;background:#cc445511}
+    .member-err-tag{font-size:10px;color:var(--accent2);border:var(--px) solid var(--accent2);padding:1px 5px;margin-left:6px;white-space:nowrap}
+    .member-card{background:#080814;border:var(--px) solid var(--border);padding:10px 12px;display:flex;align-items:center;gap:10px}
+    .member-dot{width:8px;height:8px;border:var(--px) solid;flex-shrink:0}
+    .member-info{flex:1;overflow:hidden}
+    .member-name{font-weight:bold;font-size:14px}
+    .member-url{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px}
+
+    /* シフト */
+    .loading{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 0;gap:16px}
+    .chars{display:flex;gap:6px;align-items:flex-end}
+    .char{width:14px;height:14px;border:var(--px) solid;animation:charjump .6s steps(1) infinite}
+    .char:nth-child(1){background:#5588cc;border-color:#7799cc;animation-delay:0s}
+    .char:nth-child(2){background:#bb7744;border-color:#cc8855;animation-delay:.15s}
+    .char:nth-child(3){background:#449966;border-color:#55aa77;animation-delay:.3s}
+    .char:nth-child(4){background:#885599;border-color:#9966bb;animation-delay:.45s}
+    @keyframes charjump{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+    .progress-wrap{width:160px;height:8px;background:#080814;border:var(--px) solid var(--muted);overflow:hidden}
+    .progress-bar{height:100%;background:repeating-linear-gradient(90deg,var(--accent) 0px,var(--accent) 5px,transparent 5px,transparent 8px);width:65%;animation:progress-scroll 1.2s steps(12) infinite}
+    @keyframes progress-scroll{from{background-position:0 0}to{background-position:64px 0}}
+    .loading-text{font-family:'Press Start 2P',monospace;font-size:7px;color:var(--accent);animation:blink 1s steps(1) infinite}
+    @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+    .loading-dots::after{content:'';animation:dotanim 1.5s steps(4) infinite}
+    @keyframes dotanim{0%{content:''}25%{content:'.'}50%{content:'..'}75%{content:'...'}}
+    .loading-sub{font-size:12px;color:var(--muted)}
+
+    .empty-state{text-align:center;padding:60px 24px;color:var(--muted);font-size:13px;line-height:2}
+    .month-divider{font-family:'Press Start 2P',monospace;font-size:6px;color:var(--muted);letter-spacing:.15em;padding:14px 14px 6px;display:flex;align-items:center;gap:8px}
+    .month-divider::after{content:'';flex:1;height:var(--px);background:var(--border)}
+    .date-block{padding:0 14px}
+    .date-block--highlight{border-left:calc(var(--px)*2) solid var(--accent);background:#5588cc0a;padding-left:10px;margin:2px 8px}
+    .date-row{display:flex;align-items:center;padding:7px 0 5px;border-bottom:var(--px) solid #ffffff08;gap:6px}
+    .date-tag{font-family:'DotGothic16',monospace;font-size:13px;font-weight:bold;min-width:88px;color:var(--text)}
+    .date-tag.sat{color:#5599bb}.date-tag.sun{color:#aa4455}
+    .event-tag{font-size:10px;color:var(--accent4);border:var(--px) solid var(--accent4);padding:1px 5px;margin-left:6px;font-family:'DotGothic16',monospace;display:inline-block;text-decoration:none;cursor:pointer;}
+    .event-tag:active{transform:translate(1px,1px);opacity:.7;}
+    .event-tag.sport{color:#55aa77;border-color:#55aa77;}
+    .shift-pills{display:flex;flex-wrap:wrap;gap:4px;flex:1}
+    .shift-pill{display:flex;align-items:center;gap:4px;padding:2px 6px;border:var(--px) solid;font-size:11px}
+
+    .c0{color:#7799cc}.c1{color:#cc8855}.c2{color:#55aa77}.c3{color:#9966bb}.c4{color:#aaa033}.c5{color:#cc5566}.c6{color:#5599aa}.c7{color:#99aa55}
+    .bg0{border-color:#5588cc55;background:#5588cc0e}
+    .bg1{border-color:#bb774455;background:#bb77440e}
+    .bg2{border-color:#44996655;background:#4499660e}
+    .bg3{border-color:#8855bb55;background:#8855bb0e}
+    .bg4{border-color:#99882255;background:#9988220e}
+    .bg5{border-color:#bb445566;background:#bb44550e}
+    .bg6{border-color:#33889955;background:#3388990e}
+    .bg7{border-color:#77885555;background:#7788550e}
+
+    .pill-name{font-size:11px;font-weight:bold}
+    .pill-time{font-size:11px;color:#556;font-variant-numeric:tabular-nums}
+
+    .date-block--today{border-left:calc(var(--px)*2) solid #cc8833;background:#cc883308;padding-left:10px;margin:2px 8px;}
+    .date-block--today .date-tag{color:#cc9944;}
+    .pill-pending{border-style:dashed!important;background:transparent!important;border-color:#bb774488!important}
+    .pill-pending .pill-name{color:#cc8855!important}
+    .pill-pending .pill-time{color:#bb774466}
+    .pill-rejected{border-style:dotted!important;background:transparent!important;border-color:#88889966!important;opacity:0.7;}
+    .pill-rejected .pill-name{color:#888899!important;text-decoration:line-through;}
+    .pill-label-rejected{font-size:11px;border:none!important;padding:0!important;}
+    .pill-time-rejected{color:#888899!important;font-size:10px;}
+    .pill-label{font-size:7px;border:var(--px) solid #cc8855;padding:0 2px;color:#cc8855;font-family:'Press Start 2P',monospace}
+
+    /* 占い */
+    .fortune-overlay{position:fixed;inset:0;background:#00000099;z-index:400;display:flex;align-items:flex-end}
+    .fortune-overlay.hidden{display:none}
+    .fortune-sheet{background:var(--bg);border-top:var(--px) solid var(--accent);width:100%;padding:20px;display:flex;flex-direction:column;gap:14px;align-items:center}
+    .fortune-stars{font-size:22px;letter-spacing:2px;margin:4px 0}
+    .fortune-item{font-family:'Press Start 2P',monospace;font-size:9px;color:var(--accent4);text-align:center;line-height:2}
+    .fortune-msg{font-size:13px;color:var(--muted);text-align:center}
+    /* ゲーム */
+    .game-overlay{position:fixed;inset:0;background:var(--bg);z-index:300;display:flex;flex-direction:column}
+    .game-overlay.hidden{display:none}
+    .game-header{background:var(--surface);border-bottom:var(--px) solid var(--accent);padding:8px 14px;display:flex;align-items:center;justify-content:space-between}
+    .game-title{font-family:'Press Start 2P',monospace;font-size:8px;color:var(--accent)}
+    #gameCanvas{display:block;width:100%;background:#080814;border-bottom:var(--px) solid var(--border)}
+    .game-ui{padding:12px 14px;display:flex;flex-direction:column;gap:10px;flex:1;overflow-y:auto}
+    .game-score-display{font-family:'Press Start 2P',monospace;font-size:10px;color:var(--accent3);text-align:center}
+    .game-btn{font-family:'DotGothic16',monospace;font-size:16px;padding:14px;background:var(--accent);color:#fff;border:none;width:100%;cursor:pointer;box-shadow:4px 4px 0 #2a4477;font-weight:bold}
+    .game-btn:active{transform:translate(2px,2px);box-shadow:2px 2px 0 #2a4477}
+    .ranking-list{display:flex;flex-direction:column;gap:6px}
+    .ranking-row{display:flex;align-items:center;gap:10px;padding:6px 10px;background:var(--surface);border:var(--px) solid var(--border)}
+    .rank-badge{font-family:'Press Start 2P',monospace;font-size:8px;min-width:24px;text-align:center}
+    .rank-1{color:#ffcc00}.rank-2{color:#aaaaaa}.rank-3{color:#cc7744}
+    .rank-name{flex:1;font-size:13px}
+    .rank-score{font-family:'Press Start 2P',monospace;font-size:8px;color:var(--accent3)}
+    .game-setup{padding:20px;display:flex;flex-direction:column;gap:12px;max-width:380px;margin:0 auto}
+    /* メニュー（左下、展開式） */
+    .menu-wrap{position:fixed;bottom:44px;left:14px;z-index:97;display:flex;flex-direction:column;align-items:flex-start;gap:8px;}
+    .menu-items{display:flex;flex-direction:column;gap:8px;margin-bottom:0;}
+    .menu-item-btn{width:44px;height:44px;background:var(--surface);border:var(--px) solid var(--accent4);box-shadow:3px 3px 0 #664400;display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;opacity:0;transform:translateY(8px) scale(0.8);pointer-events:none;transition:opacity .15s,transform .15s;}
+    .menu-wrap.open .menu-item-btn{opacity:1;transform:translateY(0) scale(1);pointer-events:auto;}
+    .menu-item-btn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 #664400}
+    .menu-fab{width:60px;height:44px;background:var(--surface);border:var(--px) solid var(--accent);box-shadow:3px 3px 0 #2a4477;display:flex;align-items:center;justify-content:center;font-family:'DotGothic16',monospace;font-size:11px;color:var(--accent);cursor:pointer;}
+    .menu-fab:active{transform:translate(2px,2px);box-shadow:1px 1px 0 #2a4477}
+    .menu-item-vs{width:auto;min-width:80px;font-size:11px;font-family:'DotGothic16',monospace;color:#bb77dd;border-color:#bb77dd;box-shadow:3px 3px 0 #442266;}
+    .menu-item-text{width:auto;min-width:80px;font-size:11px;font-family:'DotGothic16',monospace;color:var(--accent3);border-color:var(--accent3);box-shadow:3px 3px 0 #224433;}
+    /* オンライン対戦 */
+    .vs-overlay{position:fixed;inset:0;background:var(--bg);z-index:360;display:flex;flex-direction:column;overflow-y:auto}
+    .vs-overlay.hidden{display:none}
+    .vs-header{background:var(--surface);border-bottom:var(--px) solid #bb77dd;padding:8px 14px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:5}
+    .vs-title{font-family:'Press Start 2P',monospace;font-size:8px;color:#bb77dd}
+    .vs-body{padding:16px;display:flex;flex-direction:column;gap:12px;max-width:420px;margin:0 auto;width:100%}
+    .vs-code{font-family:'Press Start 2P',monospace;font-size:20px;color:var(--accent3);text-align:center;letter-spacing:4px;background:#080814;border:var(--px) solid var(--accent3);padding:14px}
+    .vs-player{display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--surface);border:var(--px) solid var(--border);font-size:13px}
+    .vs-player.me{border-color:var(--accent3)}
+    .vs-player.ready{background:#44aa6611}
+    .vs-player-name{flex:1}
+    .vs-badge{font-family:'Press Start 2P',monospace;font-size:8px;color:var(--accent4)}
+    .vs-sub{font-size:11px;color:var(--muted)}
+    .vs-flash{min-height:120px;display:flex;align-items:center;justify-content:center;text-align:center;padding:10px}
+    .vs-flash-name{font-family:'DotGothic16',monospace;font-size:clamp(20px,8vw,30px);font-weight:bold;color:var(--accent3)}
+    .vs-timer{font-family:'Press Start 2P',monospace;font-size:16px;color:var(--accent2);text-align:center}
+    .vs-answer{font-family:'Press Start 2P',monospace;font-size:20px;color:var(--accent3);text-align:center;background:#080814;border:var(--px) solid var(--accent3);padding:14px;min-height:50px}
+    .vs-res-row{display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--border);font-size:13px}
+    .vs-res-ok{color:var(--accent3)}
+    .vs-res-ng{color:var(--muted)}
+    /* 年間ランキング */
+    .yr-overlay{position:fixed;inset:0;background:var(--bg);z-index:370;display:flex;flex-direction:column;overflow-y:auto}
+    .yr-overlay.hidden{display:none}
+    .yr-header{background:var(--surface);border-bottom:var(--px) solid var(--accent4);padding:8px 14px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:5}
+    .yr-title{font-family:'Press Start 2P',monospace;font-size:8px;color:var(--accent4)}
+    .yr-body{padding:16px;display:flex;flex-direction:column;gap:18px;max-width:420px;margin:0 auto;width:100%}
+    .yr-hero{text-align:center;padding:10px 0}
+    .yr-year{font-family:'Press Start 2P',monospace;font-size:26px;color:var(--accent4);letter-spacing:2px}
+    .yr-sub{font-size:11px;color:var(--muted);margin-top:6px}
+    .yr-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+    .yr-stat{background:var(--surface);border:var(--px) solid var(--border);padding:10px 4px;text-align:center}
+    .yr-stat-n{font-family:'Press Start 2P',monospace;font-size:14px;color:var(--accent3)}
+    .yr-stat-l{font-size:10px;color:var(--muted);margin-top:4px}
+    .yr-sec{font-size:12px;color:var(--accent4);border-bottom:var(--px) solid var(--border);padding-bottom:4px;margin-bottom:8px}
+    .yr-row{display:flex;align-items:center;gap:8px;padding:7px 8px;font-size:13px;border-bottom:1px solid var(--border)}
+    .yr-row.top1{background:#cc883318;border-left:3px solid #ffcc44}
+    .yr-row.top2{background:#99999910;border-left:3px solid #bbbbbb}
+    .yr-row.top3{background:#aa663310;border-left:3px solid #cc8855}
+    .yr-rank{font-family:'Press Start 2P',monospace;font-size:10px;color:var(--muted);min-width:26px}
+    .yr-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .yr-val{font-family:'Press Start 2P',monospace;font-size:10px;color:var(--accent3)}
+    .yr-secret{opacity:.55}
+    .yr-cmd{flex:1;background:transparent;border:none;outline:none;color:var(--text);font-family:'DotGothic16',monospace;font-size:13px;padding:0;width:100%}
+    .yr-empty{font-size:12px;color:var(--muted);text-align:center;padding:30px 10px;line-height:2}
+    /* 現場アンケート */
+    .sv-overlay{position:fixed;inset:0;background:#000000aa;z-index:380;display:flex;align-items:flex-end}
+    .sv-overlay.hidden{display:none}
+    .sv-sheet{background:var(--bg);border-top:var(--px) solid var(--accent4);width:100%;max-height:92vh;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px}
+    .sv-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+    .sv-title{font-family:'Press Start 2P',monospace;font-size:9px;color:var(--accent4);line-height:1.8}
+    .sv-close{background:transparent;border:var(--px) solid var(--muted);color:var(--muted);font-size:14px;width:30px;height:30px;cursor:pointer;flex-shrink:0;line-height:1}
+    .sv-close:active{transform:translate(1px,1px)}
+    .sv-date{font-size:13px;color:var(--text)}
+    .sv-event{font-size:11px;color:var(--accent4);margin-top:2px}
+    .sv-q{font-size:12px;color:var(--muted);margin-bottom:6px}
+    .sv-opts{display:flex;flex-wrap:wrap;gap:6px}
+    .sv-opt{font-family:'DotGothic16',monospace;font-size:13px;padding:8px 12px;background:var(--surface);color:var(--text);border:var(--px) solid var(--border);cursor:pointer}
+    .sv-opt.sel{border-color:var(--accent4);background:#cc883322;color:var(--accent4);font-weight:bold}
+    .sv-opt:active{transform:translate(1px,1px)}
+    .sv-scale{align-items:center;flex-wrap:nowrap;gap:4px}
+    .sv-end{font-size:10px;color:var(--muted);white-space:nowrap;flex-shrink:0}
+    .sv-num{flex:1;min-width:0;padding:10px 0;text-align:center;font-family:'Press Start 2P',monospace;font-size:12px}
+    .sv-skip{font-size:11px;color:var(--muted);text-align:center;text-decoration:underline;cursor:pointer;padding:4px}
+    /* フラッシュ会計 */
+    .flash-overlay{position:fixed;inset:0;background:var(--bg);z-index:350;display:flex;flex-direction:column}
+    .flash-overlay.hidden{display:none}
+    .flash-header{background:var(--surface);border-bottom:var(--px) solid var(--accent3);padding:8px 14px;display:flex;align-items:center;justify-content:space-between}
+    .flash-title{font-family:'Press Start 2P',monospace;font-size:8px;color:var(--accent3)}
+    .flash-setup{padding:20px;display:flex;flex-direction:column;gap:12px;max-width:380px;margin:0 auto}
+    .flash-setup.hidden{display:none}
+    .flash-diff-btn{font-family:'DotGothic16',monospace;font-size:14px;padding:12px;background:var(--surface);color:var(--text);border:var(--px) solid var(--border);cursor:pointer;text-align:left;}
+    .flash-diff-btn.selected{border-color:var(--accent3);background:#44996611;color:var(--accent3);}
+    .flash-sub-grid{display:flex;flex-direction:column;gap:8px;margin-top:4px;}
+    .flash-sub-grid.hidden{display:none}
+    .flash-play{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;gap:16px;}
+    .flash-item-display{color:var(--text);text-align:center;line-height:1.6;min-height:120px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 12px;}
+    .flash-item-name{font-family:'DotGothic16',monospace;font-size:clamp(18px,7vw,28px);font-weight:bold;color:var(--accent3);word-break:keep-all;}
+    .flash-item-price{font-size:18px;color:#fff;margin-top:6px;}
+    .flash-progress{font-size:11px;color:var(--muted);}
+    .flash-answer-area{display:none;flex-direction:column;gap:12px;width:100%;max-width:320px;}
+    .flash-answer-display{font-family:'Press Start 2P',monospace;font-size:20px;color:var(--accent3);text-align:center;background:#080814;border:var(--px) solid var(--accent3);padding:14px;min-height:50px;}
+    .numpad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+    .numpad-btn{font-family:'DotGothic16',monospace;font-size:18px;padding:16px;background:var(--surface);color:var(--text);border:var(--px) solid var(--border);cursor:pointer;}
+    .numpad-btn:active{background:var(--accent3);color:#fff;}
+    .flash-result{display:none;flex-direction:column;align-items:center;gap:12px;padding:20px;text-align:center;}
+    .flash-result-correct{font-family:'Press Start 2P',monospace;font-size:14px;color:var(--accent3);}
+    .flash-result-wrong{font-family:'Press Start 2P',monospace;font-size:14px;color:var(--accent2);}
+    .modal-overlay{position:fixed;inset:0;background:#00000088;z-index:200;display:flex;align-items:flex-end}
+    .modal-overlay.hidden{display:none}
+    .modal-sheet{background:var(--bg);border-top:var(--px) solid var(--accent);width:100%;max-height:90vh;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px}
+    .modal-header{display:flex;align-items:center;justify-content:space-between}
+    .modal-title{font-family:'Press Start 2P',monospace;font-size:8px;color:var(--accent)}
+    .color-grid{display:flex;flex-wrap:wrap;gap:8px}
+    .color-dot{width:28px;height:28px;border:var(--px) solid #00000000;cursor:pointer}
+    .color-dot.selected{border-color:#fff;box-shadow:0 0 0 var(--px) var(--accent)}
+    .stat-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:var(--px) solid var(--border)}
+    .stat-label{font-size:12px;color:var(--muted)}
+    .stat-value{font-family:'Press Start 2P',monospace;font-size:9px;color:var(--accent3)}
+    .status-bar{position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:var(--px) solid var(--border);padding:6px 14px;display:flex;justify-content:space-between;font-size:11px;color:var(--muted);z-index:98}
+    /* シフト申請 */
+    .apply-overlay{position:fixed;inset:0;background:#00000099;z-index:300;display:flex;align-items:flex-end}
+    .apply-overlay.hidden{display:none}
+    .apply-sheet{background:var(--bg);border-top:2px solid var(--accent3);width:100%;max-height:92vh;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
+    .apply-header{display:flex;align-items:center;justify-content:space-between}
+    .apply-title{font-family:'Press Start 2P',monospace;font-size:8px;color:var(--accent3)}
+    .date-row-apply{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)}
+    .date-label-apply{font-size:13px;min-width:90px}
+    .date-label-apply.sat{color:#5599bb}.date-label-apply.sun{color:#aa4455}
+    .time-inputs{display:flex;align-items:center;gap:4px;flex:1}
+    .time-input{background:#080814;border:1px solid var(--muted);color:var(--text);font-family:'DotGothic16',monospace;font-size:13px;padding:4px 6px;width:64px;text-align:center;-webkit-appearance:none}
+    .time-input:focus{border-color:var(--accent3)}
+    .time-sep{color:var(--muted);font-size:12px}
+    .time-clear{background:transparent;border:none;color:var(--muted);font-size:16px;cursor:pointer;padding:2px 6px}
+    .toast{position:fixed;bottom:36px;left:50%;transform:translateX(-50%);background:var(--surface);color:var(--accent3);font-size:12px;padding:8px 16px;border:var(--px) solid var(--accent3);box-shadow:3px 3px 0 #224433;z-index:999;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .2s}
+    .toast.show{opacity:1}
+  </style>
+  <script src="https://js.pusher.com/8.2/pusher.min.js"></script>
+</head>
+<body>
+
+<div class="header">
+  <span class="logo">SHIFT.EXE</span>
+  <div class="header-actions">
+    <button class="btn-px btn-ghost btn-sm" id="fetchBtn" style="display:none" onclick="fetchAll(true)">更新</button>
+    <button class="btn-px btn-red btn-sm" id="leaveBtn" style="display:none" onclick="leaveGroup()">HOME</button>
+  </div>
+</div>
+
+<div class="tabs" id="tabs" style="display:none">
+  <div class="tab active" data-tab="shifts">▶ シフト</div>
+  <div class="tab" data-tab="settings">⚙ メンバー設定</div>
+</div>
+
+<div class="main">
+
+  <!-- グループ画面 -->
+  <div id="groupScreen">
+    <div class="group-screen">
+      <div class="screen-title">SHIFT<br>MATOMEREL</div>
+
+      <div class="px-card">
+        <div class="px-label">グループを作る</div>
+        <input type="text" id="newGroupId" placeholder="グループID（例: maverick2026）" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+        <div style="font-size:11px;color:var(--muted);">英数字入力，任意のIDを入力してください</div>
+        <button class="btn-px btn-primary" onclick="createGroup()">START ▶</button>
+      </div>
+
+      <div class="divider">CONTINUE</div>
+
+      <div class="px-card">
+        <div class="px-label">グループに参加する</div>
+        <input type="text" id="joinGroupId" placeholder="グループID" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+        <button class="btn-px btn-primary" onclick="joinGroup()">JOIN ▶</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- アプリ画面 -->
+  <div id="appScreen" style="display:none">
+    <div class="view active" id="view-shifts">
+      <div id="shiftContent">
+        <div class="empty-state">「更新」を押してシフトを読み込む<br><span style="font-size:12px">先にメンバー設定でURLを登録してね</span></div>
+      </div>
+    </div>
+
+    <div class="view" id="view-settings">
+      <div class="settings-section">
+
+        <div class="section">
+          <div class="section-label">GROUP ID</div>
+          <div class="group-info">
+            <span class="group-id-text" id="groupIdDisplay"></span>
+            <button class="btn-px btn-ghost btn-sm" onclick="copyGroupId()">招待する</button>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-label">ADD MEMBER</div>
+          <div class="px-card">
+            <div>
+              <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">あだ名</div>
+              <input type="text" id="nameInput" placeholder="シフタ" maxlength="20" autocomplete="off">
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">シフトURL（ciftr.jp）</div>
+              <input type="url" id="urlInput" placeholder="https://m-s1.ciftr.jp/staff/index?s=..." autocomplete="off" autocorrect="off" autocapitalize="off">
+            </div>
+            <button class="btn-px btn-primary" onclick="addMember()">ADD ＋</button>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-label">MEMBERS</div>
+          <div class="member-list" id="memberList">
+            <div style="font-size:13px;color:var(--muted);">まだ登録されていません</div>
+          </div>
+        </div>
+
+        <div class="section" id="rankingSection" style="display:none">
+          <div class="section-label">🏆 LION RUN ランキング</div>
+          <div style="font-size:11px;color:var(--accent);margin-bottom:4px;">🦁 LION RUN</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:6px;">今日のベスト</div>
+          <div class="ranking-list" id="dailyRanking"></div>
+          <div style="font-size:11px;color:var(--muted);margin:10px 0 6px;">歴代ベスト</div>
+          <div class="ranking-list" id="allTimeRanking"></div>
+          <div style="font-size:11px;color:var(--accent4);margin:12px 0 4px;">🥊 TAP ATTACK</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:6px;">今日のベスト</div>
+          <div class="ranking-list" id="tapDailyRanking"></div>
+          <div style="font-size:11px;color:var(--muted);margin:10px 0 6px;">歴代ベスト</div>
+          <div class="ranking-list" id="tapAllTimeRanking"></div>
+        </div>
+
+        <div class="section">
+          <div class="section-label">🔧 シフター入力設定</div>
+          <div id="adminLoginArea" style="display:flex;flex-direction:column;gap:8px;">
+            <div style="font-size:11px;color:var(--muted);">管理者パスワード</div>
+            <input type="password" id="adminPwInput" placeholder="管理者パスワード" autocomplete="off">
+            <button class="btn-px btn-ghost btn-sm" onclick="openAdminPanel()">管理画面を開く</button>
+          </div>
+          <div id="adminPanel" style="display:none;flex-direction:column;gap:10px;">
+            <div style="font-size:12px;color:var(--accent3);">✓ 管理者認証済み</div>
+            <div style="font-size:11px;color:var(--muted);">リセットするメンバーを選択してください</div>
+            <select id="adminMemberSelect" style="background:#080814;border:2px solid var(--muted);color:var(--text);font-family:inherit;font-size:14px;padding:8px;width:100%;outline:none;"></select>
+            <div style="font-size:11px;color:var(--muted);">リセットすると次回そのメンバーは再設定が必要になります</div>
+            <button class="btn-px btn-primary" style="background:var(--accent2);" onclick="adminResetPassword()">パスワードをリセット</button>
+            <button class="btn-px btn-red btn-sm" onclick="closeAdminPanel()">管理画面を閉じる</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="status-bar">
+  <span id="statusText">▶ READY</span>
+  <span id="lastUpdated"></span>
+</div>
+
+<!-- シフト申請モーダル（iframe埋め込み） -->
+<div class="apply-overlay hidden" id="applyOverlay" onclick="closeApplyOutside(event)">
+  <div class="apply-sheet" id="applySheet" style="height:90vh;padding:0;">
+    <div class="apply-header" style="padding:8px 14px;">
+      <span class="apply-title" id="applyTitle">シフト申請</span>
+      <button class="btn-px btn-red btn-sm" onclick="closeApply()">✕</button>
+    </div>
+    <div id="applyMemberSelect" style="display:none;flex-direction:column;gap:10px;padding:16px;">
+      <div style="font-size:12px;color:var(--muted);">申請するメンバーを選択してください</div>
+      <div id="applyMemberList" style="display:flex;flex-direction:column;gap:6px;"></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- メニュー（左下） -->
+<div class="menu-wrap" id="menuWrap">
+  <div class="menu-items" id="menuItems">
+    <button class="menu-item-btn" onclick="openMypage();closeMenu()" title="マイページ">👤</button>
+    <button class="menu-item-btn" onclick="openFortune();closeMenu()" title="今日の運勢">🔮</button>
+    <button class="menu-item-btn" onclick="openFlashGameSetup();closeMenu()" title="フラッシュ会計">🧮</button>
+    <button class="menu-item-btn menu-item-text" onclick="yrOpen();closeMenu()" title="年間ランキング">🏆年間</button>
+    <button class="menu-item-btn menu-item-vs" onclick="vsOpen();closeMenu()" title="フラッシュ対戦">対戦</button>
+    <button class="menu-item-btn menu-item-text" onclick="openApplyMenu();closeMenu()" title="シフト申請">シフト申請</button>
+  </div>
+  <button class="menu-fab" id="menuFab" onclick="toggleMenu()">MENU</button>
+</div>
+
+<!-- 占いモーダル -->
+<div class="fortune-overlay hidden" id="fortuneOverlay" onclick="closeFortune(event)">
+  <div class="fortune-sheet" id="fortuneSheet">
+    <div style="font-family:'Press Start 2P',monospace;font-size:8px;color:var(--accent4);">TODAY'S FORTUNE</div>
+    <div class="fortune-stars" id="fortuneStars"></div>
+    <div class="fortune-item" id="fortuneItem"></div>
+    <div class="fortune-msg">今日も一日、頑張りましょう♪</div>
+    <button class="btn-px btn-ghost btn-sm" onclick="closeFortune()">閉じる</button>
+  </div>
+</div>
+
+<!-- オンライン対戦オーバーレイ -->
+<div class="vs-overlay hidden" id="vsOverlay">
+  <div class="vs-header">
+    <span class="vs-title">🆚 フラッシュ対戦</span>
+    <span class="vs-title" id="vsSetLabel"></span>
+    <button class="btn-px btn-red btn-sm" onclick="vsExit()">EXIT</button>
+  </div>
+  <div class="vs-body">
+
+    <!-- ロビー（作成・参加） -->
+    <div id="vsLobby" style="display:flex;flex-direction:column;gap:12px;">
+      <div style="font-family:'Press Start 2P',monospace;font-size:9px;color:var(--accent4);text-align:center;line-height:2">ONLINE BATTLE</div>
+      <div class="vs-sub">ニックネーム</div>
+      <input type="text" id="vsName" placeholder="例: しふた" maxlength="12" autocomplete="off">
+
+      <div style="height:1px;background:var(--border);margin:4px 0"></div>
+      <div class="vs-sub">ルームを作る</div>
+      <div class="vs-sub">ルームID（任意・空欄なら自動生成）</div>
+      <input type="text" id="vsCustomCode" placeholder="例: maverick" maxlength="20" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <div class="vs-sub">セット数（1ゲームの試合数）</div>
+      <input type="number" id="vsSets" value="5" min="1" max="20" inputmode="numeric">
+      <div class="vs-sub">難易度レンジ（セットごとに上がっていく）</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <select id="vsMinLv" style="flex:1;background:#080814;border:2px solid var(--muted);color:var(--text);font-family:inherit;font-size:14px;padding:8px;outline:none">
+          <option value="1">イージー</option><option value="2">ノーマル</option><option value="3">エクストラ</option>
+        </select>
+        <span class="vs-sub">〜</span>
+        <select id="vsMaxLv" style="flex:1;background:#080814;border:2px solid var(--muted);color:var(--text);font-family:inherit;font-size:14px;padding:8px;outline:none">
+          <option value="1">イージー</option><option value="2">ノーマル</option><option value="3" selected>エクストラ</option>
+        </select>
+      </div>
+      <button class="btn-px btn-primary" style="background:var(--accent4);" onclick="vsCreate()">ルームを作る ▶</button>
+
+      <div style="height:1px;background:var(--border);margin:4px 0"></div>
+      <div class="vs-sub">ルームに参加する</div>
+      <input type="text" id="vsCode" placeholder="ルームID" maxlength="20" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <button class="btn-px btn-primary" style="background:var(--accent3);" onclick="vsJoin()">参加する ▶</button>
+    </div>
+
+    <!-- 待合室 -->
+    <div id="vsWaiting" style="display:none;flex-direction:column;gap:10px;">
+      <div class="vs-sub" style="text-align:center">ルームID（仲間に共有）</div>
+      <div class="vs-code" id="vsCodeDisplay">-----</div>
+      <button class="btn-px btn-ghost btn-sm" onclick="vsShareCode()">コードをコピー</button>
+      <div class="vs-sub" id="vsSettingLabel"></div>
+      <div class="vs-sub">参加者</div>
+      <div id="vsPlayerList" style="display:flex;flex-direction:column;gap:6px;"></div>
+      <button class="btn-px btn-primary" style="background:var(--accent4);" id="vsStartBtn" onclick="vsStartPractice()">練習を開始する ▶</button>
+      <div class="vs-sub" id="vsHostNote" style="text-align:center">ホストの開始を待っています...</div>
+      <div style="height:1px;background:var(--border);margin:4px 0"></div>
+      <div class="vs-sub" style="text-align:center">待ってる間に遊べます</div>
+      <button class="btn-px btn-ghost" onclick="vsOpenLion()">🦁 ライオンランで暇つぶし</button>
+    </div>
+
+    <!-- 出題中 -->
+    <div id="vsPlaying" style="display:none;flex-direction:column;gap:10px;">
+      <div class="vs-sub" id="vsProgress" style="text-align:center"></div>
+      <div class="vs-flash"><div class="vs-flash-name" id="vsFlashName"></div></div>
+    </div>
+
+    <!-- 回答 -->
+    <div id="vsAnswering" style="display:none;flex-direction:column;gap:10px;">
+      <div class="vs-timer" id="vsCountdown">--</div>
+      <div class="vs-sub" style="text-align:center">合計金額は？</div>
+      <div class="vs-answer" id="vsAnswerDisplay">¥0</div>
+      <div class="numpad">
+        <button class="numpad-btn" onclick="vsNum('1')">1</button>
+        <button class="numpad-btn" onclick="vsNum('2')">2</button>
+        <button class="numpad-btn" onclick="vsNum('3')">3</button>
+        <button class="numpad-btn" onclick="vsNum('4')">4</button>
+        <button class="numpad-btn" onclick="vsNum('5')">5</button>
+        <button class="numpad-btn" onclick="vsNum('6')">6</button>
+        <button class="numpad-btn" onclick="vsNum('7')">7</button>
+        <button class="numpad-btn" onclick="vsNum('8')">8</button>
+        <button class="numpad-btn" onclick="vsNum('9')">9</button>
+        <button class="numpad-btn" onclick="vsNum('clear')">C</button>
+        <button class="numpad-btn" onclick="vsNum('0')">0</button>
+        <button class="numpad-btn" onclick="vsNum('back')">⌫</button>
+      </div>
+      <button class="game-btn" style="background:var(--accent3);" onclick="vsSubmit()">決定 ▶</button>
+      <div class="vs-sub" id="vsAnsweredCount" style="text-align:center"></div>
+    </div>
+
+    <!-- セット結果 -->
+    <div id="vsResult" style="display:none;flex-direction:column;gap:10px;">
+      <div id="vsResultTitle" style="text-align:center"></div>
+      <div class="vs-sub" style="text-align:center">正解 <span id="vsCorrectTotal" style="color:var(--accent3);font-weight:bold"></span></div>
+      <div id="vsResultList"></div>
+      <div class="vs-sub">現在のセット獲得数</div>
+      <div id="vsStandings"></div>
+      <button class="btn-px btn-primary" style="background:var(--accent4);" id="vsNextBtn" onclick="vsNext()">次のセットへ ▶</button>
+      <div class="vs-sub" id="vsWaitHost" style="text-align:center">ホストの進行を待っています...</div>
+    </div>
+
+    <!-- 最終結果 -->
+    <div id="vsFinal" style="display:none;flex-direction:column;gap:10px;">
+      <div style="font-family:'Press Start 2P',monospace;font-size:12px;color:var(--accent4);text-align:center">GAME SET</div>
+      <div id="vsFinalList"></div>
+      <button class="btn-px btn-ghost" onclick="vsExit()">終了する</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- 年間ランキング -->
+<div class="yr-overlay hidden" id="yrOverlay">
+  <div class="yr-header">
+    <span class="yr-title">🏆 年間ランキング</span>
+    <select id="yrYear" onchange="yrLoad()" style="background:#080814;border:var(--px) solid var(--muted);color:var(--text);font-family:inherit;font-size:13px;padding:4px 8px;outline:none"></select>
+    <button class="btn-px btn-red btn-sm" onclick="yrClose()">EXIT</button>
+  </div>
+  <div class="yr-body" id="yrBody"></div>
+</div>
+
+<!-- 現場アンケート -->
+<div class="sv-overlay hidden" id="svOverlay">
+  <div class="sv-sheet">
+    <div class="sv-head">
+      <div>
+        <div class="sv-title">現場アンケート</div>
+        <div class="sv-date" id="svDate"></div>
+        <div class="sv-event" id="svEvent"></div>
+      </div>
+      <button class="sv-close" onclick="svSkip()" title="スキップ">✕</button>
+    </div>
+
+    <div>
+      <div class="sv-q">この日のシフトは？</div>
+      <div class="sv-opts" id="svWorked"></div>
+    </div>
+
+    <div id="svDetail" style="display:none;flex-direction:column;gap:12px;">
+      <div>
+        <div class="sv-q">お客さんの混み具合<span style="opacity:.7">（1〜5）</span></div>
+        <div class="sv-opts sv-scale" id="svCrowd"></div>
+      </div>
+      <div>
+        <div class="sv-q">フードの余り具合<span style="opacity:.7">（1〜5）</span></div>
+        <div class="sv-opts sv-scale" id="svFood"></div>
+      </div>
+      <div>
+        <div class="sv-q">アルコール販売</div>
+        <div class="sv-opts" id="svAlcohol"></div>
+      </div>
+    </div>
+
+    <button class="btn-px btn-primary" id="svSend" style="background:var(--accent4);display:none;" onclick="svSubmit()">送信する ▶</button>
+    <div class="sv-skip" onclick="svSkip()">今回はスキップ</div>
+  </div>
+</div>
+
+<!-- フラッシュ会計オーバーレイ -->
+<div class="flash-overlay hidden" id="flashOverlay">
+  <div class="flash-header">
+    <span class="flash-title">フラッシュ会計</span>
+    <button class="btn-px btn-red btn-sm" onclick="exitFlashGame()">EXIT</button>
+  </div>
+
+  <!-- 難易度選択画面 -->
+  <div class="flash-setup" id="flashSetup">
+    <div style="font-family:'Press Start 2P',monospace;font-size:9px;color:var(--accent3);text-align:center;line-height:2">FLASH ACCOUNTING<br>会計を暗算しよう！</div>
+    <div class="flash-diff-btn" onclick="selectFlashDifficulty('easy')">🟢 イージー（ノンアルのみ）</div>
+    <div class="flash-diff-btn" onclick="selectFlashDifficulty('normal')">🟡 ノーマル（アルコール含む）</div>
+    <div class="flash-diff-btn" onclick="selectFlashDifficulty('extra')">🔴 エクストラ</div>
+    <div class="flash-sub-grid hidden" id="flashExtraChoice">
+      <div style="font-size:11px;color:var(--muted);">エクストラの種類を選択</div>
+      <div class="flash-diff-btn" onclick="startFlashGame('extra')">⚡ レギュラー</div>
+      <div class="flash-diff-btn" onclick="showFlashSubGrid()">🎯 特別メニューを選ぶ</div>
+    </div>
+    <div class="flash-sub-grid hidden" id="flashSubGrid">
+      <div style="font-size:11px;color:var(--muted);">特別メニューを選択</div>
+      <div class="flash-diff-btn" onclick="startFlashGame('extra','winter')">❄️ 冬モード</div>
+      <div class="flash-diff-btn" onclick="startFlashGame('extra','jp')">🎤 ジャニーズモード（ノンアル限定）</div>
+      <div class="flash-diff-btn" onclick="startFlashGame('extra','event')">🎪 イベントモード</div>
+    </div>
+    <button class="btn-px btn-ghost" onclick="openFlashMenuList()" style="margin-top:8px;">📋 商品メニューを見る</button>
+    <button class="btn-px btn-red" onclick="exitFlashGame()" style="margin-top:4px;">シフトに戻る</button>
+  </div>
+
+  <!-- 商品メニュー一覧画面 -->
+  <div class="flash-setup hidden" id="flashMenuList" style="overflow-y:auto;max-height:100%;">
+    <div style="font-family:'Press Start 2P',monospace;font-size:9px;color:var(--accent3);text-align:center;">商品メニュー</div>
+    <div id="flashMenuListContent" style="display:flex;flex-direction:column;gap:4px;"></div>
+    <button class="btn-px btn-ghost" onclick="closeFlashMenuList()" style="margin-top:8px;">戻る</button>
+  </div>
+
+  <!-- プレイ画面 -->
+  <div class="flash-play" id="flashPlay" style="display:none">
+    <div class="flash-progress" id="flashProgress">1 / 5</div>
+    <div class="flash-item-display" id="flashItemDisplay">
+      <div class="flash-item-name" id="flashItemName"></div>
+      <div class="flash-item-price" id="flashItemPrice"></div>
+    </div>
+
+    <!-- 回答エリア（出題が終わると表示） -->
+    <div class="flash-answer-area" id="flashAnswerArea">
+      <div style="font-size:12px;color:var(--muted);text-align:center;">合計金額は？</div>
+      <div class="flash-answer-display" id="flashAnswerDisplay">¥0</div>
+      <div class="numpad">
+        <button class="numpad-btn" onclick="flashNumInput('1')">1</button>
+        <button class="numpad-btn" onclick="flashNumInput('2')">2</button>
+        <button class="numpad-btn" onclick="flashNumInput('3')">3</button>
+        <button class="numpad-btn" onclick="flashNumInput('4')">4</button>
+        <button class="numpad-btn" onclick="flashNumInput('5')">5</button>
+        <button class="numpad-btn" onclick="flashNumInput('6')">6</button>
+        <button class="numpad-btn" onclick="flashNumInput('7')">7</button>
+        <button class="numpad-btn" onclick="flashNumInput('8')">8</button>
+        <button class="numpad-btn" onclick="flashNumInput('9')">9</button>
+        <button class="numpad-btn" onclick="flashNumInput('clear')">C</button>
+        <button class="numpad-btn" onclick="flashNumInput('0')">0</button>
+        <button class="numpad-btn" onclick="flashNumInput('back')">⌫</button>
+      </div>
+      <button class="game-btn" style="background:var(--accent3);" onclick="submitFlashAnswer()">決定 ▶</button>
+    </div>
+  </div>
+
+  <!-- 結果画面 -->
+  <div class="flash-result" id="flashResult">
+    <div id="flashResultTitle"></div>
+    <div style="font-size:13px;color:var(--muted);" id="flashResultDetail"></div>
+    <button class="game-btn" style="background:var(--accent3);" onclick="retryFlashGame()">RETRY ▶</button>
+    <button class="btn-px btn-ghost" onclick="openFlashGameSetup()" style="margin-top:4px;">モード選択へ戻る</button>
+  </div>
+</div>
+
+<!-- ゲームオーバーレイ -->
+<div class="game-overlay hidden" id="gameOverlay">
+  <div class="game-header">
+    <span class="game-title" id="gameTitle">LION RUN</span>
+    <button class="btn-px btn-red btn-sm" onclick="exitGame()">EXIT</button>
+  </div>
+
+  <!-- セットアップ画面 -->
+  <div id="gameSetup" class="game-setup">
+    <div style="font-family:'Press Start 2P',monospace;font-size:9px;color:var(--accent3);text-align:center;line-height:2">LION RUN<br>障害物を避けろ！</div>
+    <div style="font-size:11px;color:var(--muted);">ニックネーム</div>
+    <input type="text" id="gameNickname" placeholder="例: しふた" autocomplete="off">
+    <div style="font-size:11px;color:var(--muted);">マイID（スコア保存用・任意）</div>
+    <input type="text" id="gameUserId" placeholder="例: matomereltarou1234" autocomplete="off" autocorrect="off" autocapitalize="off">
+    <div style="font-size:11px;color:var(--muted);">ランキングを表示するシフトグループID</div>
+    <input type="text" id="gameGroupIdInput" placeholder="例: maverick" autocomplete="off" autocorrect="off" autocapitalize="off">
+    <button class="game-btn" onclick="startGame()">GAME START ▶</button>
+  </div>
+
+  <!-- ライオンラン画面 -->
+  <div id="gameScreen" style="display:none;flex:1;flex-direction:column">
+    <canvas id="gameCanvas" height="180"></canvas>
+    <div class="game-ui">
+      <div class="game-score-display" id="gameScoreDisplay">0 m</div>
+      <button class="game-btn" id="jumpBtn" onclick="jump()">JUMP ▶</button>
+      <div id="gameOverMsg" style="display:none;text-align:center;">
+        <div style="font-family:'Press Start 2P',monospace;font-size:9px;color:var(--accent2);margin-bottom:8px;">GAME OVER</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:12px;" id="finalScoreMsg"></div>
+        <button class="game-btn" onclick="restartGame()" style="margin-bottom:8px;">RETRY ▶</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 連打ゲーム画面 -->
+  <div id="tapScreen" style="display:none;flex-direction:column;align-items:center;padding:20px;gap:14px;flex:1">
+    <div style="font-family:'Press Start 2P',monospace;font-size:8px;color:var(--accent4);">TAP ATTACK</div>
+    <div style="font-size:12px;color:var(--muted);">10秒間で何回連打できる？</div>
+    <div class="game-score-display" id="tapCountDisplay">0 回</div>
+    <div class="game-score-display" id="tapTimerDisplay" style="color:var(--accent2);">10.0 秒</div>
+    <button class="game-btn" id="tapBtn" onclick="onTap()" style="background:var(--accent4);box-shadow:4px 4px 0 #664400;height:120px;font-size:24px;">TAP！</button>
+    <div id="tapResultMsg" style="display:none;text-align:center;width:100%">
+      <div style="font-family:'Press Start 2P',monospace;font-size:9px;color:var(--accent3);margin-bottom:8px;">RESULT</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:12px;" id="tapFinalMsg"></div>
+      <button class="game-btn" onclick="startTapGame()" style="background:var(--accent4);margin-bottom:8px;">RETRY ▶</button>
+      <button class="game-btn" onclick="switchToLionGame()" style="margin-top:4px;">🦁 ライオンランへ</button>
+    </div>
+  </div>
+
+  <!-- ランキング画面（メンバー設定内に表示） -->
+</div>
+
+<!-- マイページモーダル -->
+<div class="modal-overlay hidden" id="mypageModal" onclick="closeMypageModal(event)">
+  <div class="modal-sheet" id="mypageSheet">
+    <div class="modal-header">
+      <span class="modal-title" id="mypageTitle">MY PAGE</span>
+      <button class="btn-px btn-ghost btn-sm" onclick="closeMypage()">✕</button>
+    </div>
+
+    <!-- 未ログイン画面 -->
+    <div id="mypageLogin">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">マイIDでログインすると給料計算などができます</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <div style="font-size:11px;color:var(--muted);">マイID（英数字6文字以上）</div>
+        <input type="text" id="myUserId" placeholder="例: matomereltarou1234" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+        <button class="btn-px btn-primary" onclick="loginMypage()">ログイン / 新規登録</button>
+      </div>
+    </div>
+
+    <!-- 新規登録画面 -->
+    <div id="mypageRegister" style="display:none">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">初回登録：グループIDとニックネームを紐づけます</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <div style="font-size:11px;color:var(--muted);">グループID</div>
+        <input type="text" id="regGroupId" placeholder="グループID" autocomplete="off" autocorrect="off" autocapitalize="off">
+        <div style="font-size:11px;color:var(--muted);">ニックネーム（グループに登録済みのもの）</div>
+        <input type="text" id="regNickname" placeholder="例: しふた" autocomplete="off">
+        <button class="btn-px btn-primary" onclick="registerMypage()">登録する</button>
+      </div>
+    </div>
+
+    <!-- マイページ本体 -->
+    <div id="mypageMain" style="display:none">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+        <span id="myNicknameDisplay" style="font-size:16px;font-weight:bold;"></span>
+        <span style="font-size:11px;color:var(--muted);" id="myGroupDisplay"></span>
+      </div>
+
+      <!-- ステータス -->
+      <div class="px-card" style="margin-bottom:10px;">
+        <div class="px-label">TODAY</div>
+        <div class="stat-row"><span class="stat-label">🦁 LION RUN 本日順位</span><span class="stat-value" id="myRankDisplay">-</span></div>
+      </div>
+
+      <button class="btn-px btn-red" onclick="logoutMypage()" style="width:100%;margin-top:8px;">ログアウト</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const DAY=['日','月','火','水','木','金','土'];
+const C=['c0','c1','c2','c3','c4','c5','c6','c7'];
+const BG=['bg0','bg1','bg2','bg3','bg4','bg5','bg6','bg7'];
+const LOADING_MSGS=['みんなのシフトを集めてるよ','もうちょっとだけ待ってね！','ciftrにアクセス中...','データを整理してるよ','あとちょっと！'];
+let members=[], groupId=null, loadingMsgTimer=null, lastShiftData=null, lastResults=null, skipNextBgRefresh=false;
+
+// ===== グループ =====
+function createGroup(){
+  const id=document.getElementById('newGroupId').value.trim();
+  if(!id){ showToast('グループIDを入力してください'); return; }
+  if(/^[0-5]$/.test(id)){ openGameSetup(id, 'lion'); return; }
+  if(/^[6-9]$/.test(id)){ openGameSetup(id, 'tap'); return; }
+  if(!/^[a-zA-Z0-9_-]+$/.test(id)){ showToast('英数字・ハイフン・アンダーバーのみ使えます'); return; }
+  enterGroup(id);
+}
+
+function joinGroup(){
+  const id=document.getElementById('joinGroupId').value.trim();
+  if(!id){ showToast('グループIDを入力してください'); return; }
+  if(/^[0-5]$/.test(id)){ openGameSetup(id, 'lion'); return; }
+  if(/^[6-9]$/.test(id)){ openGameSetup(id, 'tap'); return; }
+  enterGroup(id);
+}
+
+async function enterGroup(id){
+  groupId=id;
+  localStorage.setItem('shiftGroupId',id);
+  document.getElementById('groupScreen').style.display='none';
+  document.getElementById('appScreen').style.display='block';
+  document.getElementById('tabs').style.display='flex';
+  document.getElementById('fetchBtn').style.display='inline-block';
+  document.getElementById('leaveBtn').style.display='inline-block';
+  document.getElementById('groupIdDisplay').textContent=id;
+  setStatus('メンバーを読み込み中...');
+  await loadMembers();
+  loadRanking(id);
+  if(members.length>0){
+    fetchAll(); // SWR: キャッシュ即表示 → 裏で最新確認まで自動
+  }
+  else setStatus('メンバーを登録してください');
+}
+
+function leaveGroup(){
+  localStorage.removeItem('shiftGroupId');
+  groupId=null; members=[];
+  document.getElementById('groupScreen').style.display='block';
+  document.getElementById('appScreen').style.display='none';
+  document.getElementById('tabs').style.display='none';
+  document.getElementById('fetchBtn').style.display='none';
+  document.getElementById('leaveBtn').style.display='none';
+  document.querySelectorAll('.tab')[0].click();
+  setStatus('▶ READY');
+  document.getElementById('lastUpdated').textContent='';
+  document.getElementById('shiftContent').innerHTML='<div class="empty-state">「更新」を押してシフトを読み込む</div>';
+}
+
+// ===== API =====
+async function loadMembers(){
+  try{
+    const r=await fetch(`/api/groups?groupId=${encodeURIComponent(groupId)}`);
+    const d=await r.json();
+    members=d.members||[];
+    renderMembers();
+    setStatus('▶ READY');
+  }catch(e){ showToast('読み込みに失敗しました'); }
+}
+
+async function addMember(){
+  const name=document.getElementById('nameInput').value.trim();
+  const url=document.getElementById('urlInput').value.trim();
+  if(!name||!url){ showToast('名前とURLを入力してください'); return; }
+  if(!url.includes('ciftr.jp')){ showToast('ciftr.jpのURLを入力してください'); return; }
+  try{
+    const r=await fetch(`/api/groups?groupId=${encodeURIComponent(groupId)}&action=add`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({name,url})
     });
-    await Promise.all(runners);
-    return out;
-  };
+    const d=await r.json();
+    if(d.error){ showToast(d.error==='already exists'?'このURLは登録済みです':d.error); return; }
+    members=d.members;
+    document.getElementById('nameInput').value='';
+    document.getElementById('urlInput').value='';
+    renderMembers();
+    showToast(`${name} を追加しました ✓`);
+  }catch(e){ showToast('追加に失敗しました'); }
+}
 
-  const results = await runLimited(members, async (member, idx) => {
-    try {
-      const apiUrl = `${getBaseUrl(req)}/api/fetch-shift?url=${encodeURIComponent(member.url)}`;
-      // 失敗時は間隔を空けて最大3回まで再試行（ciftrの一時的な拒否対策）
-      let d = null, lastErr = null;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        if (attempt > 0) await new Promise(r2 => setTimeout(r2, 600 * attempt));
-        try {
-          const r = await fetch(apiUrl);
-          if (!r.ok) { lastErr = new Error(`HTTP ${r.status}`); continue; }
-          const j = await r.json();
-          if (j.error) { lastErr = new Error(j.error); continue; }
-          d = j; break;
-        } catch (e2) { lastErr = e2; }
-      }
-      if (!d) throw lastErr || new Error('fetch failed');
+async function removeMember(url,name){
+  try{
+    const r=await fetch(`/api/groups?groupId=${encodeURIComponent(groupId)}&action=remove`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({url})
+    });
+    const d=await r.json();
+    members=d.members;
+    renderMembers();
+    showToast(`${name} を削除しました`);
+  }catch(e){ showToast('削除に失敗しました'); }
+}
 
-      // 申請シフトの処理
-      let pendingShifts = d.pendingShifts || [];
-      const rejectedShifts = d.rejectedShifts || [];
-      const confirmedDates = new Set((d.shifts || []).map(s => s.date));
-      const rejectedDates = new Set(rejectedShifts.map(s => s.date));
+// ===== シフト取得 =====
+async function loadEvents(results){
+  try{
+    const months=new Set();
+    (results||[]).forEach(m=>(m.shifts||[]).forEach(s=>{
+      const dt=new Date(s.date+'T00:00:00');
+      months.add(`${dt.getFullYear()}-${dt.getMonth()+1}`);
+    }));
+    const evMap={};
+    for(const ym of months){
+      const [y,mo]=ym.split('-');
+      try{
+        const evRes=await fetch(`/api/events?year=${y}&month=${mo}`);
+        if(evRes.ok){
+          const evData=await evRes.json();
+          (evData.events||[]).forEach(e=>{ evMap[e.date]=e; });
+        }
+      }catch(e){}
+    }
+    svEventMap = evMap;
+    applyEventTags(evMap);
+    showTodayEvent(evMap);
+    setTimeout(svMaybeAsk, 2500);
+  }catch(e){
+    // イベント取得が全体的に失敗してもシフト表示には何も影響しない
+  }
+}
 
-      // ===== 申請シフトのマージ処理 =====
-      // ・申請ページ(bulk_edit)は「今開いてる申請ウィンドウ」の日付しか含まない
-      // ・締め切りが過ぎた（ウィンドウが閉じた）日付の申請は、確定/不採用が出るまでキャッシュでキープ
-      // ・ウィンドウがまだ開いてる日付は、取得した申請ページが正 → ページに無ければ本人取り消しとして消す
-      // ※マージに失敗しても確定シフトの表示は絶対に守る（try/catchを分離）
-      try {
-        const freshPending = pendingShifts;
-        const rawCached = prevPendingCache[member.name];
-        const cached = (Array.isArray(rawCached) ? rawCached : []).filter(
-          s => s && typeof s.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s.date)
-        );
-        const todayStr = jstToday();
-
-        // 1) キャッシュのうち「ウィンドウが閉じた日付」だけ残す（過去日・確定済み・不採用は除去）
-        const keptFromCache = cached.filter(s =>
-          isWindowClosed(s.date) &&
-          s.date >= todayStr &&
-          !confirmedDates.has(s.date) &&
-          !rejectedDates.has(s.date)
-        );
-
-        // 2) 今回取得分（開いてるウィンドウ）とマージ（日付重複はfresh優先）
-        const freshDates = new Set(freshPending.map(s => s.date));
-        const merged = [
-          ...freshPending,
-          ...keptFromCache.filter(s => !freshDates.has(s.date))
-        ];
-
-        pendingShifts = merged;
-        prevPendingCache[member.name] = merged;
-      } catch(mergeErr) {
-        // マージ失敗時は今回取得分だけ使う（確定シフトには影響させない）
-        console.error('pending merge error:', member.name, mergeErr.message);
-      }
-
-      return { name: member.name, colorIdx: idx, ...d, pendingShifts };
-    } catch(e) {
-      // 取得失敗 → 前回の正常データがあればそれを表示し続ける（消えるより古い方がマシ）
-      const prev = prevByName[member.name];
-      if (prev) {
-        return { ...prev, colorIdx: idx, error: e.message, stale: true };
-      }
-      return { name: member.name, colorIdx: idx, error: e.message, shifts: [], pendingShifts: [], rejectedShifts: [] };
+function applyEventTags(evMap){
+  document.querySelectorAll('.date-tag[data-date]').forEach(tagEl=>{
+    const date=tagEl.dataset.date;
+    const ev=evMap[date];
+    if(ev){
+      const sportTypes=['スポーツ','バスケットボール','バレーボール'];
+      const cls=sportTypes.includes(ev.type)?' sport':'';
+      const existing=tagEl.querySelector('.event-tag');
+      if(existing) existing.remove();
+      // 公式ページが分かればリンク化（無ければイベント名で検索に飛ばす）
+      const link = ev.url || `https://www.google.com/search?q=${encodeURIComponent(ev.name + ' 横浜アリーナ')}`;
+      tagEl.insertAdjacentHTML('beforeend',
+        `<a class="event-tag${cls}" href="${esc(link)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${esc(ev.name.slice(0,15))}</a>`);
     }
   });
-
-  const now = new Date().toISOString();
-  const data = { results, cachedAt: now, fromCache: false };
-
-  // ===== 空データ上書きガード =====
-  // 取得結果が「異常」なら shifts: も pending: も上書きせず、前回の正常キャッシュを返す。
-  // 異常の定義：確定シフトを1件でも持つ人が0人（＝全員空 or 全員エラー）。
-  // ciftrが一時的にログイン期限切れHTMLを返しても、最後の正常データを表示し続けるための延命策。
-  const anyoneHasShifts = results.some(r => (r.shifts || []).length > 0);
-
-  if (!anyoneHasShifts) {
-    // 異常取得 → 前回の正常キャッシュがあればそれを返す（shifts:もpending:も上書きしない）
-    const prevCache = await redisGet(cacheKey);
-    const prevHadData = prevCache?.results?.some(r => (r.shifts || []).length > 0);
-    if (prevHadData) {
-      return res.status(200).json({ ...prevCache, fromCache: true, stale: true });
-    }
-    // 前回も正常データが無い場合のみ、今回の空データを保存（初回等）
-    await redisSet(pendingCacheKey, prevPendingCache);
-    await redisSet(cacheKey, data);
-    return res.status(200).json({ ...data, allEmpty: true });
-  }
-
-  // 正常取得 → キャッシュ保存
-  await redisSet(pendingCacheKey, prevPendingCache);
-  await redisSet(cacheKey, data);
-
-  // 確定シフトを履歴として永続記録（失敗しても表示には影響させない）
-  try {
-    await recordHistory(groupId, results, redisGet, redisSet);
-  } catch (e) {
-    console.error('history record error:', e.message);
-  }
-
-  return res.status(200).json(data);
 }
 
-// ===== シフト履歴の記録 =====
-// 月ごとのバケツ history:{groupId}:{YYYY-MM} に
-// { "2026-11-07": { "くらち": "16:00-19:00", ... } } の形で貯める。
-// ciftrから消えた過去の日付も消さずに残し続けるのが目的。
-async function recordHistory(groupId, results, redisGet, redisSet) {
-  // 今回取得できた確定シフトを月別にまとめる
-  const byMonth = {};
-  for (const r of (results || [])) {
-    if (!r || !r.name) continue;
-    for (const sh of (r.shifts || [])) {
-      if (!sh || !sh.date || !sh.start || !sh.end) continue;
-      const m = String(sh.date).slice(0, 7);
-      if (!/^\d{4}-\d{2}$/.test(m)) continue;
-      byMonth[m] = byMonth[m] || {};
-      byMonth[m][sh.date] = byMonth[m][sh.date] || {};
-      byMonth[m][sh.date][r.name] = `${sh.start}-${sh.end}`;
+function showTodayEvent(evMap){
+  const today=new Date().toLocaleDateString('sv-SE');
+  const ev=evMap[today];
+  let el=document.getElementById('todayEventBanner');
+  if(!el){
+    el=document.createElement('div');
+    el.id='todayEventBanner';
+    el.style.cssText='padding:8px 14px;font-size:12px;border-bottom:2px solid var(--border);display:flex;align-items:center;gap:8px;';
+    const shiftContent=document.getElementById('shiftContent');
+    if(shiftContent && shiftContent.parentNode){
+      shiftContent.parentNode.insertBefore(el, shiftContent);
     }
   }
-  if (!Object.keys(byMonth).length) return;
+  if(ev){
+    el.style.display='flex';
+    const link = ev.url || `https://www.google.com/search?q=${encodeURIComponent(ev.name + ' 横浜アリーナ')}`;
+    el.innerHTML=`<span style="font-family:'Press Start 2P',monospace;font-size:7px;color:var(--accent4);">TODAY</span><a href="${esc(link)}" target="_blank" rel="noopener noreferrer" style="color:var(--text);text-decoration:underline;">🎪 ${esc(ev.name)}</a><span style="font-size:11px;color:var(--muted);">${esc(ev.type||'')}</span>`;
+  } else {
+    el.style.display='none';
+  }
+}
 
-  const idxKey = `history-index:${groupId}`;
-  const knownMonths = (await redisGet(idxKey)) || [];
-  let idxChanged = false;
+// ===== シフト取得 =====
+// force=true（更新ボタン）: ローディング画面を出してciftrから確実に再取得
+// force=false（起動時）  : キャッシュを即表示 → 裏で最新を取得して差し替え（SWR）
+async function fetchAll(force=false){
+  if(!members.length){ showToast('先にメンバーを設定してください'); return; }
+  document.getElementById('fetchBtn').disabled=true;
 
-  for (const [m, days] of Object.entries(byMonth)) {
-    const key = `history:${groupId}:${m}`;
-    const stored = (await redisGet(key)) || {};
+  if(!force){
+    // ===== SWR: キャッシュ即表示 =====
+    try{
+      const r=await fetch(`/api/get-shifts?groupId=${encodeURIComponent(groupId)}&mode=cache`);
+      if(!r.ok) throw new Error(`HTTP ${r.status}`);
+      const d=await r.json();
+      if(d.error) throw new Error(d.error);
 
-    // 今回見えた日付だけ上書き。見えなくなった過去の日付はそのまま残す
-    let changed = false;
-    for (const [date, people] of Object.entries(days)) {
-      if (JSON.stringify(stored[date] || {}) !== JSON.stringify(people)) {
-        stored[date] = people;
-        changed = true;
+      document.getElementById('fetchBtn').disabled=false;
+      lastResults=d.results||[];
+      renderShifts(d.results||[]);
+      renderMembers();
+      lastShiftData=JSON.stringify((d.results||[]).map(r=>({name:r.name,shifts:r.shifts,pendingShifts:r.pendingShifts,rejectedShifts:r.rejectedShifts})));
+      loadEvents(d.results||[]);
+
+      const t=d.cachedAt?new Date(d.cachedAt):new Date();
+      document.getElementById('lastUpdated').textContent=`${t.getMonth()+1}/${t.getDate()} ${t.getHours()}:${String(t.getMinutes()).padStart(2,'0')} 更新`;
+
+      if(d.fromCache){
+        // キャッシュ表示完了 → 即座に裏で最新確認
+        bgRefresh();
+      } else {
+        // キャッシュが無く実取得された（初回など）→ 裏取得は不要
+        lastBgRefreshAt = Date.now();
+        const ok=(d.results||[]).filter(r=>!r.error).length;
+        const ng=(d.results||[]).length-ok;
+        setStatus(`✓ ${ok}/${(d.results||[]).length}人 取得完了${ng?` ⚠${ng}人失敗`:''}`);
+      }
+      return;
+    }catch(e){
+      document.getElementById('fetchBtn').disabled=false;
+      document.getElementById('shiftContent').innerHTML='<div class="empty-state">取得に失敗しました</div>';
+      setStatus('ERROR');
+      return;
+    }
+  }
+
+  // ===== force: 従来のフル取得（ローディング画面あり） =====
+  let msgIdx=0;
+  document.getElementById('shiftContent').innerHTML=`
+    <div class="loading">
+      <div class="chars">
+        <div class="char"></div><div class="char"></div>
+        <div class="char"></div><div class="char"></div>
+      </div>
+      <div class="progress-wrap"><div class="progress-bar"></div></div>
+      <div class="loading-text loading-dots">LOADING</div>
+      <div class="loading-sub" id="loadingMsg">${LOADING_MSGS[0]}</div>
+    </div>`;
+  loadingMsgTimer=setInterval(()=>{
+    msgIdx=(msgIdx+1)%LOADING_MSGS.length;
+    const el=document.getElementById('loadingMsg');
+    if(el) el.textContent=LOADING_MSGS[msgIdx];
+  },1500);
+  document.querySelectorAll('.tab')[0].click();
+
+  try{
+    const url=`/api/get-shifts?groupId=${encodeURIComponent(groupId)}&force=1`;
+    const r=await fetch(url);
+    if(!r.ok) throw new Error(`HTTP ${r.status}`);
+    const d=await r.json();
+    if(d.error) throw new Error(d.error);
+
+    clearInterval(loadingMsgTimer);
+    document.getElementById('fetchBtn').disabled=false;
+    lastResults=d.results||[];
+    renderShifts(d.results||[]);
+    renderMembers();
+    lastShiftData=JSON.stringify((d.results||[]).map(r=>({name:r.name,shifts:r.shifts,pendingShifts:r.pendingShifts,rejectedShifts:r.rejectedShifts})));
+    lastBgRefreshAt = Date.now();
+
+    // イベント情報は完全に分離して非同期取得（失敗してもシフト表示に影響しない）
+    loadEvents(d.results||[]);
+
+    const ok=(d.results||[]).filter(r=>!r.error).length;
+    const total=(d.results||[]).length;
+    const staleLabel=d.stale?' (前回データ)':'';
+    const ng=total-ok;
+    setStatus(`✓ ${ok}/${total}人 取得完了${ng?` ⚠${ng}人失敗`:''}${staleLabel}`);
+
+    const t=d.cachedAt?new Date(d.cachedAt):new Date();
+    document.getElementById('lastUpdated').textContent=`${t.getMonth()+1}/${t.getDate()} ${t.getHours()}:${String(t.getMinutes()).padStart(2,'0')} 更新`;
+  }catch(e){
+    clearInterval(loadingMsgTimer);
+    document.getElementById('fetchBtn').disabled=false;
+    document.getElementById('shiftContent').innerHTML='<div class="empty-state">取得に失敗しました</div>';
+    setStatus('ERROR');
+  }
+}
+
+// ===== バックグラウンド更新（SWRの裏側） =====
+let lastBgRefreshAt = 0;
+const BG_REFRESH_DEBOUNCE = 30 * 1000; // 30秒以内の連続実行は省く（事故防止）
+
+async function bgRefresh(){
+  if(!groupId||!members.length) return;
+  if(skipNextBgRefresh){ skipNextBgRefresh=false; return; }
+  if(Date.now() - lastBgRefreshAt < BG_REFRESH_DEBOUNCE) return;
+  lastBgRefreshAt = Date.now();
+
+  setStatus('🔄 最新を確認中...');
+  try{
+    const r=await fetch(`/api/get-shifts?groupId=${encodeURIComponent(groupId)}&force=1`);
+    if(!r.ok){ setStatus('✓ 表示中（確認失敗）'); return; }
+    const d=await r.json();
+    if(!d.results){ setStatus('✓ 表示中'); return; }
+
+    const ok=(d.results||[]).filter(x=>!x.error).length;
+    const total=(d.results||[]).length;
+
+    // 差分チェック
+    const newData=JSON.stringify(d.results.map(x=>({name:x.name,shifts:x.shifts,pendingShifts:x.pendingShifts,rejectedShifts:x.rejectedShifts})));
+    if(newData===lastShiftData){
+      setStatus(`✓ 最新（${ok}/${total}人）${d.stale?' (前回データ)':''}`);
+      return;
+    }
+
+    // 差分あり→静かに差し替え
+    lastShiftData=newData;
+    lastResults=d.results||[];
+    renderShifts(d.results||[]);
+    renderMembers();
+    const t=new Date(d.cachedAt);
+    document.getElementById('lastUpdated').textContent=`${t.getMonth()+1}/${t.getDate()} ${t.getHours()}:${String(t.getMinutes()).padStart(2,'0')} 更新`;
+    setStatus(`✓ 最新（${ok}/${total}人）`);
+    showToast('シフトが更新されました！');
+  }catch(e){ setStatus('✓ 表示中（確認失敗）'); }
+}
+
+// ===== 描画 =====
+function renderMembers(){
+  const list=document.getElementById('memberList');
+  if(!members.length){ list.innerHTML='<div style="font-size:13px;color:var(--muted);">まだ登録されていません</div>'; return; }
+  const dotColors=['#7799cc','#cc8855','#55aa77','#9966bb','#aaa033','#cc5566','#5599aa','#99aa55',
+    '#bb5533','#33aacc','#99cc44','#cc44aa','#4466cc','#ccaa33','#44ccaa','#aa44cc',
+    '#cc6633','#66aacc','#88bb44','#bb4488','#dd7777','#77ddaa','#aa77dd','#ddbb55',
+    '#55bbdd','#dd55aa','#aadd55','#5577dd','#dd9944','#44dd99','#9944dd','#dd4499',
+    '#99dd44','#4499dd','#dd4444','#44dd44','#4444dd','#dddd44','#44dddd','#dd44dd'];
+  // メンバーカラーはlocalStorageから取得
+  const memberColors = JSON.parse(localStorage.getItem('memberColors_'+groupId)||'{}');
+  // 取得に失敗したメンバーを判定（シフト取得結果のerrorフラグ）
+  const errByName = {};
+  for (const r of (lastResults||[])) { if (r && r.error) errByName[r.name] = r.error; }
+  // マイページの色設定を反映
+  list.innerHTML=members.map((m,i)=>`
+    <div class="member-card${errByName[m.name]?' member-error':''}">
+      <div class="member-dot" style="color:${memberColors[m.url]||dotColors[i%8]};border-color:${memberColors[m.url]||dotColors[i%8]}"></div>
+      <div class="member-info">
+        <div class="member-name" style="color:${memberColors[m.url]||dotColors[i%8]};font-weight:bold;font-size:14px;">  ${esc(m.name)}${errByName[m.name]?'<span class="member-err-tag">⚠ 取得失敗</span>':''}</div>
+        <div class="member-url">${esc(maskCiftrUrl(m.url))}</div>
+      </div>
+      <button class="btn-px btn-ghost btn-sm" onclick="exportMemberCal('${esc(m.name)}')" style="font-size:10px;padding:3px 8px;">📅</button>
+      <button class="btn-px btn-ghost btn-sm" onclick="editNickname('${esc(m.url)}','${esc(m.name)}')" style="font-size:10px;padding:3px 6px;">✏️</button>
+      <button class="btn-px btn-ghost btn-sm" onclick="editColor('${esc(m.url)}','${esc(m.name)}')" style="font-size:10px;padding:3px 6px;">🎨</button>
+      <button class="btn-px btn-ghost btn-sm" onclick="editUrl('${esc(m.url)}','${esc(m.name)}')" style="font-size:10px;padding:3px 6px;">🔗</button>
+      <button class="btn-px btn-red" onclick="removeMember('${esc(m.url)}','${esc(m.name)}')">DEL</button>
+    </div>`).join('');
+}
+
+function renderShifts(results){
+  // メンバーカラー（localStorageの保存色、なければデフォルト40色から割当）
+  const dotColors=['#7799cc','#cc8855','#55aa77','#9966bb','#aaa033','#cc5566','#5599aa','#99aa55',
+    '#bb5533','#33aacc','#99cc44','#cc44aa','#4466cc','#ccaa33','#44ccaa','#aa44cc',
+    '#cc6633','#66aacc','#88bb44','#bb4488','#dd7777','#77ddaa','#aa77dd','#ddbb55',
+    '#55bbdd','#dd55aa','#aadd55','#5577dd','#dd9944','#44dd99','#9944dd','#dd4499',
+    '#99dd44','#4499dd','#dd4444','#44dd44','#4444dd','#dddd44','#44dddd','#dd44dd'];
+  const memberColors=JSON.parse(localStorage.getItem('memberColors_'+groupId)||'{}');
+  const urlToColor={};
+  if(members&&members.length){
+    members.forEach((m,i)=>{ urlToColor[m.name]=memberColors[m.url]||dotColors[i%dotColors.length]; });
+  }
+
+  const byDate={};
+  for(const m of results){
+    if(m.shifts){
+      for(const s of m.shifts){
+        if(!byDate[s.date]) byDate[s.date]=[];
+        byDate[s.date].push({...s,name:m.name,colorIdx:m.colorIdx,pending:false});
       }
     }
-    if (changed) await redisSet(key, stored);
-
-    if (!knownMonths.includes(m)) { knownMonths.push(m); idxChanged = true; }
+    if(m.pendingShifts){
+      for(const s of m.pendingShifts){
+        if(!byDate[s.date]) byDate[s.date]=[];
+        byDate[s.date].push({...s,name:m.name,colorIdx:m.colorIdx,pending:true});
+      }
+    }
+    if(m.rejectedShifts){
+      for(const s of m.rejectedShifts){
+        if(!byDate[s.date]) byDate[s.date]=[];
+        byDate[s.date].push({...s,name:m.name,colorIdx:m.colorIdx,rejected:true});
+      }
+    }
   }
+  const dates=Object.keys(byDate).sort();
+  if(!dates.length){ document.getElementById('shiftContent').innerHTML='<div class="empty-state">シフトが見つかりませんでした</div>'; return; }
 
-  if (idxChanged) {
-    knownMonths.sort();
-    await redisSet(idxKey, knownMonths);
+  let html='', cur=null;
+  for(const date of dates){
+    const d=new Date(date+'T00:00:00'), mo=d.getMonth()+1, dow=d.getDay();
+    if(mo!==cur){ html+=`<div class="month-divider">${d.getFullYear()}年 ${mo}月</div>`; cur=mo; }
+    const dc=dow===0?'sun':dow===6?'sat':'';
+    const todayStr=new Date().toLocaleDateString('sv-SE');
+    const isToday=date===todayStr;
+    const highlight=isToday?'date-block--today':'';
+    const pills=byDate[date].sort((a,b)=>(a.start||'').localeCompare(b.start||'')).map(s=>{
+      const memberColor=urlToColor[s.name]||C[s.colorIdx%8];
+      const isHex=memberColor.startsWith('#');
+      const nameStyle=isHex?`color:${memberColor}`:'';
+      const pillStyle=isHex?`border-color:${memberColor}33;background:${memberColor}11`:'';
+      const nameClass=isHex?'':memberColor;
+      if(s.rejected){
+        return `<div class="shift-pill pill-rejected"><span class="pill-label pill-label-rejected">👻</span><span class="pill-name" style="${nameStyle}">${esc(s.name)}</span></div>`;
+      }
+      if(s.pending){
+        return `<div class="shift-pill pill-pending" style="${pillStyle}"><span class="pill-label">申</span><span class="pill-name" style="${nameStyle}">${esc(s.name)}</span><span class="pill-time">${esc(s.start)}–${esc(s.end)}</span></div>`;
+      }
+      return `<div class="shift-pill" style="${pillStyle}"><span class="pill-name" style="${nameStyle}">${esc(s.name)}</span><span class="pill-time">${esc(s.start)}–${esc(s.end)}</span></div>`;
+    }).join('');
+    html+=`<div class="date-block ${highlight}"><div class="date-row"><span class="date-tag ${dc}" data-date="${date}">${mo}/${d.getDate()}（${DAY[dow]}）</span><div class="shift-pills">${pills}</div></div></div>`;
   }
+  document.getElementById('shiftContent').innerHTML=html;
 }
 
-// JSTの今日の日付を "YYYY-MM-DD" で返す
-function jstToday() {
-  const jst = new Date(Date.now() + 9 * 60 * 60 * 1000);
-  return jst.toISOString().slice(0, 10);
+// ===== iCalリンクコピー =====
+function exportMemberCal(memberName){
+  const calUrl=`${location.origin}/api/cal?g=${encodeURIComponent(groupId)}&name=${encodeURIComponent(memberName)}`;
+  navigator.clipboard.writeText(calUrl).then(()=>showToast('カレンダーURLをコピーしました！'));
 }
 
-// そのシフト日付の申請ウィンドウが閉じているか（＝申請ページから消える時期を過ぎたか）
-// ・16〜末日のシフト → 同月6日に申請ページが消える
-// ・1〜15日のシフト → 前月21日に申請ページが消える
-function isWindowClosed(dateStr) {
-  if (typeof dateStr !== 'string') return false;
-  const parts = dateStr.split('-').map(Number);
-  if (parts.length !== 3 || parts.some(isNaN)) return false;
-  const [y, m, d] = parts;
-  const jst = new Date(Date.now() + 9 * 60 * 60 * 1000);
-  const nowY = jst.getUTCFullYear();
-  const nowM = jst.getUTCMonth() + 1;
-  const nowD = jst.getUTCDate();
-  const nowNum = nowY * 10000 + nowM * 100 + nowD;
 
-  let closeY, closeM;
-  if (d >= 16) {
-    // 同月6日に閉じる
-    closeY = y; closeM = m;
-    return nowNum >= closeY * 10000 + closeM * 100 + 6;
+// ===== ゲーム =====
+let gameState = null;
+let gameLoop = null;
+let gameGroupId = null;
+let gameNickname = null;
+let gameUserId = null;
+
+function openGameSetup(id, gameType='lion'){
+  gameGroupId = id;
+  window._startGameType = gameType;
+  document.getElementById('gameOverlay').classList.remove('hidden');
+  document.getElementById('gameTitle').textContent = gameType==='tap' ? 'TAP ATTACK' : 'LION RUN';
+  document.getElementById('gameSetup').style.display='flex';
+  document.getElementById('gameScreen').style.display='none';
+  document.getElementById('tapScreen').style.display='none';
+  // 保存済みの情報を復元
+  const saved = localStorage.getItem('gameProfile');
+  if(saved){
+    const p = JSON.parse(saved);
+    document.getElementById('gameNickname').value = p.nickname||'';
+    document.getElementById('gameUserId').value = p.userId||'';
+  }
+  loadRanking(id);
+}
+
+function exitGame(){
+  if(gameLoop) clearInterval(gameLoop);
+  gameLoop = null;
+  document.getElementById('gameOverlay').classList.add('hidden');
+}
+
+function startGame(){
+  const nick = document.getElementById('gameNickname').value.trim();
+  const uid = document.getElementById('gameUserId').value.trim();
+  const gid = document.getElementById('gameGroupIdInput').value.trim();
+  if(!nick){ showToast('ニックネームを入力してください'); return; }
+  gameNickname = nick;
+  gameUserId = uid || ('guest_'+Math.random().toString(36).slice(2,8));
+  gameGroupId = gid || gameGroupId;
+  localStorage.setItem('gameProfile', JSON.stringify({nickname:nick, userId:uid}));
+  document.getElementById('gameSetup').style.display='none';
+  if(window._startGameType === 'tap'){
+    document.getElementById('gameScreen').style.display='none';
+    switchToTapGame();
   } else {
-    // 前月21日に閉じる
-    closeM = m - 1; closeY = y;
-    if (closeM === 0) { closeM = 12; closeY--; }
-    return nowNum >= closeY * 10000 + closeM * 100 + 21;
+    document.getElementById('gameScreen').style.display='flex';
+    document.getElementById('gameOverMsg').style.display='none';
+    document.getElementById('jumpBtn').style.display='block';
+    initGame();
   }
 }
 
-// 半月ごとに自動更新（6日と21日を超えたら）
-function shouldRefresh(cachedAt) {
-  if (!cachedAt) return true;
-  const cached = new Date(cachedAt);
-  const now = new Date();
-  const cachedPeriod = getPeriod(cached);
-  const nowPeriod = getPeriod(now);
-  return cachedPeriod !== nowPeriod;
+function restartGame(){
+  document.getElementById('gameOverMsg').style.display='none';
+  document.getElementById('jumpBtn').style.display='block';
+  initGame();
 }
 
-function getPeriod(date) {
-  const y = date.getFullYear();
-  const m = date.getMonth();
-  const d = date.getDate();
-  const half = d <= 6 ? 0 : d <= 21 ? 1 : 2;
-  return `${y}-${m}-${half}`;
+// ゲームエンジン
+function initGame(){
+  if(gameLoop) clearInterval(gameLoop);
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = canvas.offsetWidth;
+  const W = canvas.width, H = canvas.height;
+
+  const GROUND = H - 30;
+  const GRAVITY = 0.6;
+  const JUMP_FORCE = -12;
+  const SPEED_INIT = 4;
+  const SPEED_MAX = 12;
+
+  let score = 0; // meters
+  let frame = 0;
+  let speed = SPEED_INIT;
+  let running = true;
+
+  // ライオン
+  let lion = { x: 60, y: GROUND, vy: 0, onGround: true, w: 24, h: 24 };
+
+  // 障害物
+  let obstacles = [];
+  let nextObstacle = 80;
+
+  // 地面のドット
+  let dots = [];
+  for(let i=0;i<Math.ceil(W/16)+1;i++) dots.push(i*16);
+
+  function spawnObstacle(){
+    const h = 16 + Math.floor(Math.random()*24);
+    obstacles.push({x:W+10, y:GROUND-h+lion.h, w:14, h});
+  }
+
+  function drawPixelRect(x,y,w,h,color){
+    ctx.fillStyle=color;
+    ctx.fillRect(Math.round(x),Math.round(y),w,h);
+  }
+
+  function drawLion(x,y){
+    // シンプルなピクセルライオン
+    const c1='#cc8855', c2='#ffcc66', c3='#000';
+    // 体
+    drawPixelRect(x+4,y+10,16,12,c1);
+    // 頭
+    drawPixelRect(x+6,y+2,12,12,c2);
+    // たてがみ
+    drawPixelRect(x+2,y+0,20,10,c1);
+    // 目
+    drawPixelRect(x+9,y+5,2,2,c3);
+    drawPixelRect(x+14,y+5,2,2,c3);
+    // 口
+    drawPixelRect(x+10,y+9,4,2,c3);
+    // 脚（走るアニメ）
+    const legFrame = Math.floor(frame/6)%2;
+    if(legFrame===0){
+      drawPixelRect(x+6,y+20,4,8,c1);
+      drawPixelRect(x+14,y+20,4,8,c1);
+    } else {
+      drawPixelRect(x+4,y+20,4,8,c1);
+      drawPixelRect(x+16,y+20,4,8,c1);
+    }
+    // 尻尾
+    drawPixelRect(x+20,y+12,6,4,c1);
+    drawPixelRect(x+24,y+8,4,4,c1);
+  }
+
+  function drawObstacle(obs){
+    // 岩っぽい障害物
+    drawPixelRect(obs.x,obs.y,obs.w,obs.h,'#445566');
+    drawPixelRect(obs.x+2,obs.y+2,obs.w-4,4,'#556677');
+  }
+
+  function update(){
+    if(!running) return;
+    frame++;
+    // ジャンプフラグ確認
+    if(window._gameJump){ window._gameJump=false; if(lion.onGround){ lion.vy=JUMP_FORCE; lion.onGround=false; } }
+    speed = Math.min(SPEED_INIT + score/200, SPEED_MAX);
+    score += speed/60;
+
+    // ライオン物理
+    lion.vy += GRAVITY;
+    lion.y += lion.vy;
+    if(lion.y >= GROUND){
+      lion.y = GROUND;
+      lion.vy = 0;
+      lion.onGround = true;
+    } else {
+      lion.onGround = false;
+    }
+
+    // 障害物
+    nextObstacle--;
+    if(nextObstacle <= 0){
+      spawnObstacle();
+      nextObstacle = Math.floor(80 + Math.random()*60 - score/50);
+      nextObstacle = Math.max(nextObstacle, 40);
+    }
+    for(const obs of obstacles) obs.x -= speed;
+    obstacles = obstacles.filter(o => o.x > -30);
+
+    // 当たり判定
+    for(const obs of obstacles){
+      if(lion.x+4 < obs.x+obs.w && lion.x+lion.w-4 > obs.x &&
+         lion.y+4 < obs.y+obs.h && lion.y+lion.h > obs.y+4){
+        running = false;
+        gameOver(Math.floor(score));
+        return;
+      }
+    }
+
+    // 地面ドット
+    dots = dots.map(d => d - speed);
+    if(dots[0] < -16) dots.push(dots[dots.length-1]+16);
+    dots = dots.filter(d => d < W+16);
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    // 背景
+    ctx.fillStyle='#080814';
+    ctx.fillRect(0,0,W,H);
+    // 地面
+    ctx.fillStyle='#2a2a4a';
+    ctx.fillRect(0,GROUND+lion.h,W,H-(GROUND+lion.h));
+    // 地面ドット
+    ctx.fillStyle='#3a3a5a';
+    for(const d of dots) ctx.fillRect(Math.round(d),GROUND+lion.h+2,8,2);
+    // 障害物
+    for(const obs of obstacles) drawObstacle(obs);
+    // ライオン
+    drawLion(lion.x, lion.y);
+    // スコア
+    ctx.fillStyle='#5588cc';
+    ctx.font='bold 12px monospace';
+    ctx.fillText(Math.floor(score)+'m', W-60, 20);
+  }
+
+  gameLoop = setInterval(()=>{
+    update();
+    draw();
+    document.getElementById('gameScoreDisplay').textContent = Math.floor(score)+' m';
+  }, 1000/60);
 }
 
-function getBaseUrl(req) {
-  const proto = req.headers['x-forwarded-proto'] || 'https';
-  const host = req.headers['x-forwarded-host'] || req.headers.host;
-  return `${proto}://${host}`;
+function jump(){
+  const canvas = document.getElementById('gameCanvas');
+  // ジャンプイベントをゲームに送る
+  window._gameJump = true;
 }
+
+// ジャンプをゲームループに統合する簡易版
+// キャンバスタップでもジャンプ
+document.addEventListener('DOMContentLoaded', ()=>{
+  document.getElementById('gameCanvas').addEventListener('touchstart', e=>{ e.preventDefault(); _doJump(); });
+  document.getElementById('gameCanvas').addEventListener('click', _doJump);
+  document.getElementById('jumpBtn').addEventListener('touchstart', e=>{ e.preventDefault(); _doJump(); });
+});
+
+function _doJump(){
+  // ゲームのライオンに直接アクセスできないので、グローバルフラグ経由
+  window._gameJump = true;
+}
+
+// ゲームオーバー
+async function gameOver(score){
+  if(gameLoop){ clearInterval(gameLoop); gameLoop=null; }
+  document.getElementById('jumpBtn').style.display='none';
+  document.getElementById('finalScoreMsg').textContent = score+'m 走った！';
+  document.getElementById('gameOverMsg').style.display='block';
+  document.getElementById('gameScoreDisplay').textContent = score+' m';
+
+  // スコア送信
+  if(gameGroupId && gameNickname){
+    try{
+      await fetch('/api/game?action=score',{
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({userId:gameUserId, nickname:gameNickname, score, groupId:gameGroupId})
+      });
+      loadRanking(gameGroupId);
+    }catch(e){}
+  }
+}
+
+async function loadRanking(gid){
+  try{
+    // ライオンラン
+    const r1 = await fetch(`/api/game?action=ranking&groupId=${encodeURIComponent(gid)}&gameType=lion`);
+    const d1 = await r1.json();
+    renderRanking('dailyRanking', d1.daily||[], 'm');
+    renderRanking('allTimeRanking', d1.allTime||[], 'm');
+    // 連打ゲーム
+    const r2 = await fetch(`/api/game?action=ranking&groupId=${encodeURIComponent(gid)}&gameType=tap`);
+    const d2 = await r2.json();
+    renderRanking('tapDailyRanking', d2.daily||[], '回');
+    renderRanking('tapAllTimeRanking', d2.allTime||[], '回');
+    document.getElementById('rankingSection').style.display='block';
+  }catch(e){}
+}
+
+function renderRanking(containerId, scores, unit="m"){
+  const el = document.getElementById(containerId);
+  if(!el) return;
+  if(!scores.length){ el.innerHTML='<div style="font-size:12px;color:var(--muted);">まだデータなし</div>'; return; }
+  const medals=['🥇','🥈','🥉'];
+  el.innerHTML = scores.slice(0,10).map((s,i)=>`
+    <div class="ranking-row">
+      <span class="rank-badge rank-${i+1}">${medals[i]||i+1}</span>
+      <span class="rank-name" style="display:flex;flex-direction:column;gap:2px;">
+        <span>${esc(s.nickname)}</span>
+        <span style="font-size:10px;color:var(--muted);">${s.date||''} ${s.time||''}</span>
+      </span>
+      <span class="rank-score">${s.score}${unit}</span>
+    </div>`).join('');
+}
+
+async function loadMyRank(){
+  if(!myData||!gameGroupId) return;
+  try{
+    const r = await fetch(`/api/game?action=ranking&groupId=${encodeURIComponent(gameGroupId)}`);
+    const d = await r.json();
+    const daily = d.daily||[];
+    const idx = daily.findIndex(s=>s.userId===myData.userId);
+    const rankEl = document.getElementById('myRankDisplay');
+    if(rankEl) rankEl.textContent = idx>=0 ? (idx+1)+'位' : '-';
+  }catch(e){}
+}
+
+// ===== 占い =====
+const LUCKY_ITEMS = [
+  '定期','折り紙','岩のり','挽肉と米','友情','時折見せる笑顔','猫',
+  'ハイヒール','ハイヒール猫','パントマイムライオン2のLINEスタンプ',
+  '土鍋','フィーゴ','ボンベイサファイア','甲子園のコンクリ',
+  'わさび','山わさび','練りわさび','わさび漬け',
+  'しめじ','七味','窓際','ツーブロック','スリーブロック',
+  'トーキングロックフェス','2ndアルバム','3rdアルバム',
+  '実行委員','生徒会書記','シャツ','柄シャツ',
+  'ズッキーニ','ズッキーナ','ズキモン','フジモン',
+  'ヒール','こどもの国駅',
+  'ヒール','こどもの国駅','宝物','気前','斧','思いやる心','戸越銀座商店街','簡易トイレ','エンタの神様',
+  '通天閣','いつもの','パントマイムライオン3のLINEスタンプ',
+  '表札','定型分'
+];
+
+function openFortune(){
+  const today = new Date();
+  let seed = today.getFullYear()*10000 + (today.getMonth()+1)*100 + today.getDate();
+
+  // 【追加】ブラウザごとに固有のランダムIDを生成してシードに加算
+  let userUniqueKey = localStorage.getItem('fortune_user_key');
+  if (!userUniqueKey) {
+    userUniqueKey = Math.floor(Math.random() * 1000000).toString();
+    localStorage.setItem('fortune_user_key', userUniqueKey);
+  }
+  seed += parseInt(userUniqueKey, 10);
+
+  // シード付き乱数
+  function seededRand(s){ let x=Math.sin(s)*10000; return x-Math.floor(x); }
+
+  // 〜〜（以降の処理はそのまま）〜〜
+
+  const isTriple = today.getDate()%3===0;
+  let raw = seededRand(seed)*10; // 0〜10
+  if(isTriple) raw = raw*0.4 + 6; // 3の倍数は高め
+  raw = Math.max(1, Math.min(10, raw));
+  const stars = Math.round(raw)/2; // 0.5〜5
+
+  // ラッキーアイテム
+  const itemIdx = Math.floor(seededRand(seed+1)*LUCKY_ITEMS.length);
+  const item = LUCKY_ITEMS[itemIdx];
+
+  // ★表示
+  const full = Math.floor(stars);
+  const half = stars%1 >= 0.5;
+  const empty = 5 - full - (half?1:0);
+  const starStr = '★'.repeat(full) + (half?'½':'') + '☆'.repeat(empty);
+
+  document.getElementById('fortuneStars').textContent = starStr + ' ' + stars;
+  document.getElementById('fortuneItem').textContent = '🍀 ラッキーアイテム: ' + item;
+  document.getElementById('fortuneOverlay').classList.remove('hidden');
+}
+
+function closeFortune(e){
+  if(!e || e.target.id==='fortuneOverlay'){
+    document.getElementById('fortuneOverlay').classList.add('hidden');
+  }
+}
+
+// ===== 連打ゲーム =====
+let tapCount = 0;
+let tapTimer = null;
+let tapRunning = false;
+let tapTimeLeft = 10.0;
+
+function switchToTapGame(){
+  document.getElementById('gameScreen').style.display='none';
+  const ts = document.getElementById('tapScreen');
+  ts.style.display='flex';
+  ts.style.flexDirection='column';
+  document.getElementById('tapResultMsg').style.display='none';
+  document.getElementById('tapBtn').disabled=false;
+  tapCount=0; tapTimeLeft=10.0;
+  document.getElementById('tapCountDisplay').textContent='0 回';
+  document.getElementById('tapTimerDisplay').textContent='10.0 秒';
+  tapRunning=false;
+}
+
+function switchToLionGame(){
+  document.getElementById('tapScreen').style.display='none';
+  document.getElementById('gameScreen').style.display='flex';
+  document.getElementById('gameOverMsg').style.display='none';
+  document.getElementById('jumpBtn').style.display='block';
+  initGame();
+}
+
+function onTap(){
+  if(tapRunning){
+    tapCount++;
+    document.getElementById('tapCountDisplay').textContent=tapCount+' 回';
+    return;
+  }
+  // 最初のタップでゲーム開始
+  tapRunning=true;
+  tapCount=1;
+  tapTimeLeft=10.0;
+  document.getElementById('tapCountDisplay').textContent='1 回';
+  tapTimer=setInterval(()=>{
+    tapTimeLeft=Math.max(0, tapTimeLeft-0.1);
+    document.getElementById('tapTimerDisplay').textContent=tapTimeLeft.toFixed(1)+' 秒';
+    if(tapTimeLeft<=0){
+      clearInterval(tapTimer);
+      tapRunning=false;
+      endTapGame();
+    }
+  },100);
+}
+
+async function endTapGame(){
+  document.getElementById('tapBtn').disabled=true;
+  document.getElementById('tapFinalMsg').textContent=tapCount+'回！';
+  document.getElementById('tapResultMsg').style.display='block';
+
+  if(gameGroupId && gameNickname){
+    try{
+      await fetch('/api/game?action=score',{
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({userId:gameUserId, nickname:gameNickname, score:tapCount, groupId:gameGroupId, gameType:'tap'})
+      });
+      loadRanking(gameGroupId);
+    }catch(e){}
+  }
+}
+
+function startTapGame(){
+  document.getElementById('tapResultMsg').style.display='none';
+  document.getElementById('tapBtn').disabled=false;
+  tapCount=0; tapTimeLeft=10.0; tapRunning=false;
+  document.getElementById('tapCountDisplay').textContent='0 回';
+  document.getElementById('tapTimerDisplay').textContent='10.0 秒';
+}
+
+// ===== ニックネーム編集 =====
+async function editNickname(url, currentName){
+  const newName = prompt('新しいニックネームを入力してください', currentName);
+  if(!newName||newName===currentName) return;
+  try{
+    const r=await fetch(`/api/groups?groupId=${encodeURIComponent(groupId)}&action=rename`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({url,oldName:currentName,newName})
+    });
+    const d=await r.json();
+    if(d.error){ showToast(d.error); return; }
+    members=d.members;
+    renderMembers();
+    showToast(`${currentName} → ${newName} に変更しました`);
+  }catch(e){ showToast('変更に失敗しました'); }
+}
+
+// ===== URL更新（シフター再発行時のリンク差し替え） =====
+async function editUrl(oldUrl, name){
+  const newUrl = prompt(`${name} の新しいシフターURLを入力してください\n（ciftr.jpの再ログイン後のURL）`, '');
+  if(!newUrl) return;
+  if(!newUrl.includes('ciftr.jp')){ showToast('ciftr.jpのURLを入力してください'); return; }
+  if(newUrl === oldUrl){ showToast('同じURLです'); return; }
+
+  try{
+    const r = await fetch(`/api/groups?groupId=${encodeURIComponent(groupId)}&action=updateUrl`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ oldUrl, newUrl })
+    });
+    const d = await r.json();
+    if(d.error){ showToast(d.error==='already exists'?'このURLは他のメンバーで使用中です':d.error); return; }
+
+    // カラー設定を新URLに引き継ぐ（URLキーで保存されているため）
+    const memberColors = JSON.parse(localStorage.getItem('memberColors_'+groupId)||'{}');
+    if(memberColors[oldUrl] !== undefined){
+      memberColors[newUrl] = memberColors[oldUrl];
+      delete memberColors[oldUrl];
+      localStorage.setItem('memberColors_'+groupId, JSON.stringify(memberColors));
+    }
+
+    // ※シフト申請パスワード（applyPw_グループID_名前）は名前キーなので変更不要、自動的に引き継がれる
+
+    members = d.members;
+    renderMembers();
+    showToast(`${name} のURLを更新しました`);
+  }catch(e){ showToast('更新に失敗しました'); }
+}
+
+// ===== カラー編集 =====
+const ALL_COLORS=[
+  '#7799cc','#cc8855','#55aa77','#9966bb','#aaa033','#cc5566','#5599aa','#99aa55',
+  '#bb5533','#33aacc','#99cc44','#cc44aa','#4466cc','#ccaa33','#44ccaa','#aa44cc',
+  '#cc6633','#66aacc','#88bb44','#bb4488','#dd7777','#77ddaa','#aa77dd','#ddbb55',
+  '#55bbdd','#dd55aa','#aadd55','#5577dd','#dd9944','#44dd99','#9944dd','#dd4499',
+  '#99dd44','#4499dd','#dd4444','#44dd44','#4444dd','#dddd44','#44dddd','#dd44dd'
+];
+
+function editColor(url, name){
+  // カラー選択ダイアログをトーストの代わりに画面上部に表示
+  const existing = document.getElementById('colorPickerOverlay');
+  if(existing) existing.remove();
+
+  const memberColors = JSON.parse(localStorage.getItem('memberColors_'+groupId)||'{}');
+  const current = memberColors[url] || '#7799cc';
+
+  const overlay = document.createElement('div');
+  overlay.id = 'colorPickerOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:#00000088;z-index:500;display:flex;align-items:flex-end';
+  overlay.innerHTML = `
+    <div style="background:var(--bg);border-top:2px solid var(--accent);width:100%;padding:16px;display:flex;flex-direction:column;gap:12px;">
+      <div style="font-family:'Press Start 2P',monospace;font-size:8px;color:var(--accent);">${name} のカラー</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;">
+        ${ALL_COLORS.map(c=>`<div onclick="setMemberColor('${url}','${c}')" style="width:32px;height:32px;background:${c};border:2px solid ${c===current?'#fff':'transparent'};cursor:pointer;"></div>`).join('')}
+      </div>
+      <button class="btn-px btn-ghost btn-sm" onclick="document.getElementById('colorPickerOverlay').remove()">閉じる</button>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+function setMemberColor(url, color){
+  const memberColors = JSON.parse(localStorage.getItem('memberColors_'+groupId)||'{}');
+  memberColors[url] = color;
+  localStorage.setItem('memberColors_'+groupId, JSON.stringify(memberColors));
+  document.getElementById('colorPickerOverlay').remove();
+  renderMembers();
+  showToast('カラーを変更しました');
+}
+
+// ===== フラッシュ会計 =====
+const FLASH_ITEMS = {
+  easy: [
+    {name:'ソフトドリンク', price:250, freq:5.5},
+    {name:'アイスコーヒー', price:400, freq:0.7},
+    {name:'レッドブル', price:500, freq:3.5},
+    {name:'もちコロ', price:400, freq:6.0},
+    {name:'ふるふるポテト', price:500, freq:7.0},
+    {name:'粗挽きジャンボフランク', price:500, freq:6.8},
+    {name:'アメリカンクリスピーポテト', price:500, freq:8.5},
+    {name:'焼きおにぎり', price:500, freq:6.5},
+    {name:'横濱からあげ醤油味', price:600, freq:8.7},
+    {name:'大玉揚げたこ焼き', price:600, freq:8.3},
+    {name:'おたふくソース焼きそば', price:700, freq:6.9},
+    {name:'やわらかカツサンド', price:700, freq:5.0},
+    {name:'究極のホットドッグ', price:900, freq:4.0},
+    {name:'チュロス', price:700, freq:9.0, oncePerOrder:true},
+  ],
+  alcohol: [
+    {name:'ハイボール', price:700, freq:6.5},
+    {name:'氷結', price:700, freq:6.5},
+    {name:'スミノフ', price:800, freq:6.5},
+    {name:'生ビール', price:900, freq:6.5},
+    {name:'レッドブルウォッカ シングル', price:900, freq:6.5},
+    {name:'レッドブルウォッカ ダブル', price:1200, freq:6.5},
+  ],
+  winter: [
+    {name:'豚まん', price:700, freq:7.4},
+    {name:'ホットコーヒー', price:400, freq:4.2},
+  ],
+  jp: [
+    {name:'カラーソーダ', price:500, freq:9.4},
+  ],
+  event: [
+    {name:'コラボドリンク（ノンアル）', price:500, freq:6.0},
+    {name:'コラボドリンク（アルコール）', price:800, freq:6.0},
+    {name:'カツカレー', price:1000, freq:3.0},
+    {name:'今川焼き', price:250, freq:1.5},
+  ],
+};
+
+// ドリンクかどうかの判定（フード:ドリンク=6:4比率に使う）
+const FLASH_DRINK_NAMES = new Set([
+  'ソフトドリンク','アイスコーヒー','レッドブル','ハイボール','氷結','スミノフ','生ビール',
+  'レッドブルウォッカ シングル','レッドブルウォッカ ダブル','ホットコーヒー',
+  'カラーソーダ','コラボドリンク（ノンアル）','コラボドリンク（アルコール）'
+]);
+
+let flashState = null;
+
+function openFlashGameSetup(){
+  document.getElementById('flashOverlay').classList.remove('hidden');
+  document.getElementById('flashSetup').style.display='flex';
+  document.getElementById('flashPlay').style.display='none';
+  document.getElementById('flashResult').style.display='none';
+  document.getElementById('flashSubGrid').classList.add('hidden');
+  document.getElementById('flashExtraChoice').classList.add('hidden');
+  document.getElementById('flashMenuList').classList.add('hidden');
+}
+
+function exitFlashGame(){
+  if(flashState && flashState.timer) clearTimeout(flashState.timer);
+  flashState = null;
+  document.getElementById('flashOverlay').classList.add('hidden');
+}
+
+function selectFlashDifficulty(diff){
+  if(diff === 'extra'){
+    document.getElementById('flashExtraChoice').classList.remove('hidden');
+    return;
+  }
+  startFlashGame(diff);
+}
+
+function showFlashSubGrid(){
+  document.getElementById('flashExtraChoice').classList.add('hidden');
+  document.getElementById('flashSubGrid').classList.remove('hidden');
+}
+
+function buildFlashPool(difficulty, subMode){
+  let pool = [...FLASH_ITEMS.easy];
+  if(difficulty === 'normal' || difficulty === 'extra'){
+    pool = pool.concat(FLASH_ITEMS.alcohol);
+  }
+  if(difficulty === 'extra' && subMode){
+    pool = pool.concat(FLASH_ITEMS[subMode] || []);
+    // ジャニーズモードはアルコール無し
+    if(subMode === 'jp'){
+      const alcoholNames = new Set(FLASH_ITEMS.alcohol.map(i=>i.name));
+      pool = pool.filter(i => !alcoholNames.has(i.name));
+    }
+  }
+  return pool;
+}
+
+function weightedPick(pool, excludeOncePerOrder){
+  const filtered = excludeOncePerOrder ? pool.filter(p=>!excludeOncePerOrder.has(p.name)) : pool;
+  // フード:ドリンク=6:4の比率で先にカテゴリを選ぶ
+  const isDrink = Math.random() < 0.4;
+  let candidates = filtered.filter(p => FLASH_DRINK_NAMES.has(p.name) === isDrink);
+  if(!candidates.length) candidates = filtered;
+  const totalWeight = candidates.reduce((sum,p)=>sum+p.freq, 0);
+  let r = Math.random() * totalWeight;
+  for(const item of candidates){
+    r -= item.freq;
+    if(r <= 0) return item;
+  }
+  return candidates[candidates.length-1];
+}
+
+function openFlashMenuList(){
+  document.getElementById('flashSetup').style.display='none';
+  document.getElementById('flashMenuList').classList.remove('hidden');
+
+  const allItems = [
+    ...FLASH_ITEMS.easy.map(i=>({...i, category:'イージー'})),
+    ...FLASH_ITEMS.alcohol.map(i=>({...i, category:'ノーマル（アルコール）'})),
+    ...FLASH_ITEMS.winter.map(i=>({...i, category:'エクストラ・冬'})),
+    ...FLASH_ITEMS.jp.map(i=>({...i, category:'エクストラ・ジャニーズ（ノンアル限定）'})),
+    ...FLASH_ITEMS.event.map(i=>({...i, category:'エクストラ・イベント'})),
+  ];
+
+  let html = '';
+  let curCat = null;
+  for(const item of allItems){
+    if(item.category !== curCat){
+      html += `<div style="font-size:11px;color:var(--accent4);margin-top:8px;">${esc(item.category)}</div>`;
+      curCat = item.category;
+    }
+    html += `<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid var(--border);">
+      <span>${esc(item.name)}</span>
+      <span style="color:var(--accent3);font-family:'Press Start 2P',monospace;font-size:11px;">¥${item.price.toLocaleString()}</span>
+    </div>`;
+  }
+  document.getElementById('flashMenuListContent').innerHTML = html;
+}
+
+function closeFlashMenuList(){
+  document.getElementById('flashMenuList').classList.add('hidden');
+  document.getElementById('flashSetup').style.display='flex';
+}
+
+function startFlashGame(difficulty, subMode){
+  const ranges = {
+    easy: [3,6],
+    normal: [5,10],
+    extra: [8,15],
+  };
+  const speeds = {
+    easy: 2000,
+    normal: 1800,
+    extra: 1500,
+  };
+  const [min,max] = ranges[difficulty];
+  const count = min + Math.floor(Math.random()*(max-min+1));
+
+  const pool = buildFlashPool(difficulty, subMode);
+  const items = [];
+  const usedOncePerOrder = new Set();
+  for(let i=0;i<count;i++){
+    const item = weightedPick(pool, usedOncePerOrder);
+    if(item.oncePerOrder) usedOncePerOrder.add(item.name);
+    items.push(item);
+  }
+  const total = items.reduce((sum,it)=>sum+it.price, 0);
+
+  flashState = {
+    difficulty, subMode, items, total,
+    index: 0, answer: '', timer: null,
+    speed: speeds[difficulty] || 1800
+  };
+
+  document.getElementById('flashSetup').style.display='none';
+  document.getElementById('flashMenuList').classList.add('hidden');
+  document.getElementById('flashExtraChoice').classList.add('hidden');
+  document.getElementById('flashSubGrid').classList.add('hidden');
+  document.getElementById('flashResult').style.display='none';
+  document.getElementById('flashPlay').style.display='flex';
+  document.getElementById('flashAnswerArea').style.display='none';
+  document.getElementById('flashItemDisplay').style.display='flex';
+
+  startFlashCountdown();
+}
+
+function startFlashCountdown(){
+  const nameEl = document.getElementById('flashItemName');
+  const priceEl = document.getElementById('flashItemPrice');
+  document.getElementById('flashProgress').textContent = 'まもなく開始...';
+  priceEl.textContent = '';
+  nameEl.style.visibility = 'visible';
+
+  let count = 3;
+  nameEl.textContent = count;
+
+  const tick = ()=>{
+    count--;
+    if(count > 0){
+      nameEl.textContent = count;
+      flashState.timer = setTimeout(tick, 700);
+    } else {
+      nameEl.textContent = 'START!';
+      flashState.timer = setTimeout(showNextFlashItem, 500);
+    }
+  };
+  flashState.timer = setTimeout(tick, 700);
+}
+
+function showNextFlashItem(){
+  const st = flashState;
+  if(!st) return;
+  if(st.index >= st.items.length){
+    showFlashAnswerInput();
+    return;
+  }
+  const item = st.items[st.index];
+  const nameEl = document.getElementById('flashItemName');
+  document.getElementById('flashProgress').textContent = `${st.index+1} / ${st.items.length}`;
+  nameEl.textContent = item.name;
+  document.getElementById('flashItemPrice').textContent = '';
+  nameEl.style.visibility = 'visible';
+  st.index++;
+
+  // 表示時間とブランク（フラッシュ消灯）時間に分割
+  const showTime = Math.max(st.speed * 0.7, 400);
+  const blankTime = Math.max(st.speed - showTime, 150);
+
+  st.timer = setTimeout(()=>{
+    nameEl.style.visibility = 'hidden';
+    st.timer = setTimeout(showNextFlashItem, blankTime);
+  }, showTime);
+}
+
+function showFlashAnswerInput(){
+  document.getElementById('flashItemDisplay').style.display='none';
+  document.getElementById('flashAnswerArea').style.display='flex';
+  document.getElementById('flashProgress').textContent = '合計金額を入力してください';
+  flashState.answer = '';
+  updateFlashAnswerDisplay();
+}
+
+function flashNumInput(key){
+  if(key==='clear'){ flashState.answer=''; }
+  else if(key==='back'){ flashState.answer = flashState.answer.slice(0,-1); }
+  else { if(flashState.answer.length < 6) flashState.answer += key; }
+  updateFlashAnswerDisplay();
+}
+
+function updateFlashAnswerDisplay(){
+  const val = flashState.answer || '0';
+  document.getElementById('flashAnswerDisplay').textContent = `¥${parseInt(val).toLocaleString()}`;
+}
+
+function submitFlashAnswer(){
+  const userAnswer = parseInt(flashState.answer || '0');
+  const correct = flashState.total;
+  const isCorrect = userAnswer === correct;
+
+  document.getElementById('flashPlay').style.display='none';
+  document.getElementById('flashResult').style.display='flex';
+
+  if(isCorrect){
+    document.getElementById('flashResultTitle').innerHTML = '<div class="flash-result-correct">正解！🎉</div>';
+    document.getElementById('flashResultDetail').textContent = `合計 ¥${correct.toLocaleString()}`;
+  } else {
+    document.getElementById('flashResultTitle').innerHTML = '<div class="flash-result-wrong">不正解...</div>';
+    document.getElementById('flashResultDetail').textContent = `あなたの回答: ¥${userAnswer.toLocaleString()} / 正解: ¥${correct.toLocaleString()}`;
+  }
+}
+
+function retryFlashGame(){
+  startFlashGame(flashState.difficulty, flashState.subMode);
+}
+
+
+function toggleMenu(){
+  document.getElementById('menuWrap').classList.toggle('open');
+}
+function closeMenu(){
+  document.getElementById('menuWrap').classList.remove('open');
+}
+
+
+// ===== シフト申請 =====
+const DAY_JP=['日','月','火','水','木','金','土'];
+
+// 申請可能な日付一覧を生成（ciftrの締め切りに準じる）
+
+
+function openApplyMenu() {
+  if(!members.length){ showToast('メンバーが登録されていません'); return; }
+
+  // この端末の持ち主が既に分かってる（パスワード設定済み）なら一覧をスキップして即申請へ
+  const myName = getMyApplyName();
+  if(myName){
+    const me = members.find(m => m.name === myName);
+    if(me){ openApply(me.url, me.name); return; }
+    // メンバー名が変わった等で見つからない場合は一覧にフォールバック
+  }
+
+  document.getElementById('applyTitle').textContent = 'シフト申請';
+  document.getElementById('applyOverlay').classList.remove('hidden');
+  showApplyScreen('applyMemberSelect');
+  const list = document.getElementById('applyMemberList');
+  list.innerHTML = members.map(m =>
+    `<button class="btn-px btn-ghost" onclick="openApply('${esc(m.url)}','${esc(m.name)}')" style="width:100%;text-align:left;padding:10px 12px;">${esc(m.name)}</button>`
+  ).join('');
+}
+
+function showApplyScreen(id) {
+  ['applyMemberSelect'].forEach(s => {
+    const el = document.getElementById(s);
+    if(el) el.style.display = 'none';
+  });
+  const target = document.getElementById(id);
+  if(target) target.style.display = 'flex';
+}
+
+async function openApply(url, name) {
+  // 申請ページのURLを決定：
+  // ・?s=xxx 形式 → bulk_edit（まとめて申請）を直接開く
+  // ・パス型（/staff/login/...）→ 登録URLをそのまま開く（ciftrトップの「まとめて申請」から進んでもらう）
+  const sParam = url.match(/[?&]s=([^&]+)/)?.[1];
+  const applyTarget = sParam
+    ? `http://m.s1.ciftr.jp/shift/bulk_edit?s=${sParam}`
+    : url;
+
+  const pwKey = 'applyPw_' + groupId + '_' + name;
+
+  // 他人チェック
+  const myName = getMyApplyName();
+  if (myName && myName !== name) {
+    showToast(`このシフターは ${myName} さん専用です`);
+    return;
+  }
+
+  // サーバー側でリセットされてないか確認
+  try {
+    const r = await fetch(`/api/admin-shift?action=check-reset&groupId=${encodeURIComponent(groupId)}&name=${encodeURIComponent(name)}`);
+    const d = await r.json();
+    if (d.reset) {
+      // リセット済み→localStorageも消して初回設定に戻す
+      localStorage.removeItem(pwKey);
+      showToast('パスワードがリセットされました。再設定してください');
+    }
+  } catch(e) {}
+
+  const savedPw = localStorage.getItem(pwKey);
+  if (!savedPw) {
+    showApplyAuth(name, applyTarget);
+  } else {
+    closeApply();
+    window.open(applyTarget, '_blank');
+    if (!sParam) showToast('ページ内の「まとめて申請」から申請してください');
+  }
+}
+
+function getMyApplyName() {
+  // このスマホで設定済みの名前を探す
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && key.startsWith('applyPw_' + groupId + '_')) {
+      return key.replace('applyPw_' + groupId + '_', '');
+    }
+  }
+  return null;
+}
+
+let _applyAuthTarget = null; // 認証後に開くURL（onclick属性のクォート事故防止のため変数渡し）
+
+function showApplyAuth(name, applyTarget) {
+  const old = document.getElementById('applyAuthDialog');
+  if (old) old.remove();
+  _applyAuthTarget = applyTarget;
+
+  const dialog = document.createElement('div');
+  dialog.id = 'applyAuthDialog';
+  dialog.style.cssText = 'position:fixed;inset:0;background:#00000099;z-index:600;display:flex;align-items:flex-end;';
+  dialog.innerHTML = `
+    <div style="background:var(--bg);border-top:2px solid var(--accent3);width:100%;padding:16px;display:flex;flex-direction:column;gap:12px;">
+      <div style="font-family:'Press Start 2P',monospace;font-size:8px;color:var(--accent3);">${esc(name)} のパスワード設定</div>
+      <div style="font-size:12px;color:var(--muted);">初回のみ：自分だけのパスワードを設定してください（次回から不要）</div>
+      <input type="password" id="authPw1" placeholder="パスワード（4文字以上）" style="background:#080814;border:2px solid var(--muted);color:var(--text);font-family:inherit;font-size:14px;padding:8px;width:100%;outline:none;">
+      <input type="password" id="authPw2" placeholder="確認入力" style="background:#080814;border:2px solid var(--muted);color:var(--text);font-family:inherit;font-size:14px;padding:8px;width:100%;outline:none;">
+      <button class="btn-px btn-primary" style="background:var(--accent3);" onclick="confirmApplyAuth('${esc(name)}')">設定してシフターを開く ▶</button>
+      <button class="btn-px btn-ghost btn-sm" onclick="document.getElementById('applyAuthDialog').remove()">キャンセル</button>
+    </div>`;
+  document.body.appendChild(dialog);
+  setTimeout(() => document.getElementById('authPw1')?.focus(), 100);
+}
+
+async function confirmApplyAuth(name) {
+  const pw1 = document.getElementById('authPw1')?.value || '';
+  const pw2 = document.getElementById('authPw2')?.value || '';
+  if (pw1.length < 4) { showToast('4文字以上で設定してください'); return; }
+  if (pw1 !== pw2) { showToast('パスワードが一致しません'); return; }
+  const pwKey = 'applyPw_' + groupId + '_' + name;
+  localStorage.setItem(pwKey, pw1);
+  // サーバー側のリセットフラグを消す
+  try { await fetch(`/api/admin-shift?action=clear-reset&groupId=${encodeURIComponent(groupId)}&name=${encodeURIComponent(name)}`); } catch(e) {}
+  document.getElementById('applyAuthDialog').remove();
+  closeApply();
+  if (_applyAuthTarget) {
+    const target = _applyAuthTarget;
+    _applyAuthTarget = null;
+    window.open(target, '_blank');
+    if (!target.includes('bulk_edit')) showToast('ページ内の「まとめて申請」から申請してください');
+    else showToast('設定しました！次回からパスワード不要です');
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function closeApply() {
+  document.getElementById('applyOverlay').classList.add('hidden');
+}
+
+function closeApplyOutside(e) {
+  if (e.target.id === 'applyOverlay') closeApply();
+}
+
+// ===== 管理者パネル =====
+let adminPassword = null;
+
+function openAdminPanel(){
+  const pw = document.getElementById('adminPwInput').value.trim();
+  if(!pw){ showToast('管理者パスワードを入力してください'); return; }
+  adminPassword = pw;
+  // メンバー一覧をセレクトに設定
+  const sel = document.getElementById('adminMemberSelect');
+  sel.innerHTML = members.map(m => `<option value="${esc(m.name)}">${esc(m.name)}</option>`).join('');
+  document.getElementById('adminLoginArea').style.display = 'none';
+  document.getElementById('adminPanel').style.display = 'flex';
+}
+
+function closeAdminPanel(){
+  adminPassword = null;
+  document.getElementById('adminPwInput').value = '';
+  document.getElementById('adminPanel').style.display = 'none';
+  document.getElementById('adminLoginArea').style.display = 'flex';
+}
+
+async function adminResetPassword(){
+  const name = document.getElementById('adminMemberSelect').value;
+  if(!name){ showToast('メンバーを選択してください'); return; }
+  try{
+    const r = await fetch('/api/admin-shift', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ action:'reset', adminPassword, groupId, name })
+    });
+    const d = await r.json();
+    if(d.error){ showToast(d.error); return; }
+    showToast(`${name} のパスワードをリセットしました`);
+  }catch(e){ showToast('エラーが発生しました'); }
+}
+
+
+// ===== フラッシュ会計 オンライン対戦 =====
+let vs = {
+  playerId: null, name: '', code: null, isHost: false,
+  pusher: null, channel: null,
+  answer: '', answerTimer: null, flashTimer: null,
+  answerDeadline: 0, submitted: false, lastSetNo: 0, awaitingReady: false,
+};
+
+function vsPlayerId(){
+  let id = localStorage.getItem('vsPlayerId');
+  if(!id){ id = 'p_' + Math.random().toString(36).slice(2,10); localStorage.setItem('vsPlayerId', id); }
+  return id;
+}
+
+function vsOpen(){
+  vs.playerId = vsPlayerId();
+  document.getElementById('vsOverlay').classList.remove('hidden');
+  vsShow('vsLobby');
+  const saved = localStorage.getItem('vsName') || (getMyApplyName() || '');
+  if(saved) document.getElementById('vsName').value = saved;
+}
+
+function vsShow(id){
+  ['vsLobby','vsWaiting','vsPlaying','vsAnswering','vsResult','vsFinal'].forEach(s=>{
+    const el = document.getElementById(s); if(el) el.style.display = 'none';
+  });
+  const t = document.getElementById(id); if(t) t.style.display = 'flex';
+}
+
+async function vsExit(){
+  try{ if(vs.code) await fetch('/api/room?action=leave',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:vs.code,playerId:vs.playerId})}); }catch(e){}
+  vsCleanup();
+  document.getElementById('vsOverlay').classList.add('hidden');
+}
+
+function vsCleanup(){
+  clearTimeout(vs.flashTimer); clearInterval(vs.answerTimer);
+  if(vs.channel && vs.pusher){ try{ vs.pusher.unsubscribe('room-'+vs.code); }catch(e){} }
+  if(vs.pusher){ try{ vs.pusher.disconnect(); }catch(e){} }
+  vs.pusher = null; vs.channel = null; vs.code = null; vs.isHost = false;
+}
+
+async function vsConnect(code){
+  const cfg = await (await fetch('/api/room?action=config')).json();
+  if(!cfg.enabled || !cfg.key){ showToast('対戦機能が未設定です'); return false; }
+  if(typeof Pusher === 'undefined'){ showToast('通信ライブラリを読み込めませんでした'); return false; }
+  vs.pusher = new Pusher(cfg.key, { cluster: cfg.cluster });
+  vs.channel = vs.pusher.subscribe('room-' + code);
+  vs.channel.bind('players', d => vsRenderPlayers(d.players, d.hostId));
+  vs.channel.bind('set-start', d => vsOnSetStart(d));
+  vs.channel.bind('answered', d => {
+    const el = document.getElementById('vsAnsweredCount');
+    if(el) el.textContent = `回答 ${d.answeredCount}/${d.totalPlayers}人`;
+  });
+  vs.channel.bind('set-result', d => vsOnSetResult(d));
+  vs.channel.bind('game-end', d => vsOnGameEnd(d));
+  return true;
+}
+
+async function vsCreate(){
+  const name = document.getElementById('vsName').value.trim();
+  if(!name){ showToast('ニックネームを入力してください'); return; }
+  localStorage.setItem('vsName', name);
+  vs.name = name;
+  const sets = parseInt(document.getElementById('vsSets').value) || 5;
+  const minLevel = parseInt(document.getElementById('vsMinLv').value);
+  const maxLevel = parseInt(document.getElementById('vsMaxLv').value);
+  if(maxLevel < minLevel){ showToast('難易度レンジが逆です'); return; }
+  try{
+    const r = await fetch('/api/room?action=create',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({playerId:vs.playerId,name,sets,minLevel,maxLevel,
+        customCode:(document.getElementById('vsCustomCode').value||'').trim()})});
+    const d = await r.json();
+    if(d.error){ showToast(d.error); return; }
+    vs.code = d.room.code; vs.isHost = true;
+    if(!(await vsConnect(vs.code))) return;
+    vsEnterWaiting(d.room);
+  }catch(e){ showToast('作成に失敗しました'); }
+}
+
+async function vsJoin(){
+  const name = document.getElementById('vsName').value.trim();
+  const code = (document.getElementById('vsCode').value || '').trim();
+  if(!name){ showToast('ニックネームを入力してください'); return; }
+  if(!code){ showToast('ルームIDを入力してください'); return; }
+  localStorage.setItem('vsName', name);
+  vs.name = name;
+  try{
+    const r = await fetch('/api/room?action=join',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({code,playerId:vs.playerId,name})});
+    const d = await r.json();
+    if(d.error){ showToast(d.error); return; }
+    vs.code = d.room.code; vs.isHost = (d.room.hostId === vs.playerId);
+    if(!(await vsConnect(vs.code))) return;
+    vsEnterWaiting(d.room);
+  }catch(e){ showToast('参加に失敗しました'); }
+}
+
+function vsEnterWaiting(room){
+  vsShow('vsWaiting');
+  document.getElementById('vsCodeDisplay').textContent = room.code;
+  const L = {1:'イージー',2:'ノーマル',3:'エクストラ'};
+  document.getElementById('vsSettingLabel').textContent =
+    `${room.settings.sets}セット制 / ${L[room.settings.minLevel]}〜${L[room.settings.maxLevel]}`;
+  vsRenderPlayers(room.players, room.hostId);
+}
+
+function vsRenderPlayers(players, hostId){
+  if(hostId) vs.isHost = (hostId === vs.playerId);
+  const el = document.getElementById('vsPlayerList');
+  if(el){
+    el.innerHTML = (players||[]).map(p=>`
+      <div class="vs-player${p.id===vs.playerId?' me':''}${p.ready?' ready':''}">
+        <span class="vs-player-name">${esc(p.name)}${p.id===vs.playerId?' (自分)':''}</span>
+        ${p.ready?'<span class="vs-badge">READY</span>':''}
+      </div>`).join('');
+  }
+  const startBtn = document.getElementById('vsStartBtn');
+  const note = document.getElementById('vsHostNote');
+  if(startBtn) startBtn.style.display = vs.isHost ? 'block' : 'none';
+  if(note) note.style.display = vs.isHost ? 'none' : 'block';
+  // 準備OK待ちの間は結果画面のボタンを触らない（全員が押せる必要があるため）
+  if(!vs.awaitingReady){
+    const nextBtn = document.getElementById('vsNextBtn');
+    const waitHost = document.getElementById('vsWaitHost');
+    if(nextBtn) nextBtn.style.display = vs.isHost ? 'block' : 'none';
+    if(waitHost) waitHost.style.display = vs.isHost ? 'none' : 'block';
+  }
+}
+
+function vsShareCode(){
+  const text = `フラッシュ会計で対戦しよう！\nルームID: ${vs.code}\n${location.origin}`;
+  if(navigator.share){ navigator.share({title:'フラッシュ対戦',text}); }
+  else navigator.clipboard.writeText(text).then(()=>showToast('コピーしました'));
+}
+
+function vsOpenLion(){
+  // 待合室の暇つぶし（記録は残さない）
+  gameGroupId = null; gameNickname = null;
+  document.getElementById('gameOverlay').classList.remove('hidden');
+  document.getElementById('gameTitle').textContent = 'LION RUN';
+  document.getElementById('gameSetup').style.display='none';
+  document.getElementById('tapScreen').style.display='none';
+  document.getElementById('gameScreen').style.display='flex';
+  document.getElementById('gameOverMsg').style.display='none';
+  document.getElementById('jumpBtn').style.display='block';
+  initGame();
+}
+
+async function vsStartPractice(){
+  try{
+    const r = await fetch('/api/room?action=practice',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({code:vs.code,playerId:vs.playerId})});
+    const d = await r.json();
+    if(d.error) showToast(d.error);
+  }catch(e){ showToast('開始に失敗しました'); }
+}
+
+function vsOnSetStart(d){
+  // 待合室のライオンランが開いていたら閉じる
+  if(gameLoop){ clearInterval(gameLoop); gameLoop=null; }
+  document.getElementById('gameOverlay').classList.add('hidden');
+
+  vs.submitted = false; vs.answer = ''; vs.lastSetNo = d.setNo; vs.awaitingReady = false;
+  document.getElementById('vsSetLabel').textContent =
+    d.practice ? '練習' : `${d.setNo} / ${d.totalSets} セット`;
+  vsShow('vsPlaying');
+  const nameEl = document.getElementById('vsFlashName');
+  const prog = document.getElementById('vsProgress');
+
+  const wait = Math.max(0, d.startAt - Date.now());
+  let count = 3;
+  nameEl.style.visibility='visible';
+  nameEl.textContent = d.practice ? '練習スタート' : `${d.label}`;
+  prog.textContent = 'まもなく開始...';
+
+  setTimeout(()=>{
+    let idx = 0;
+    const showNext = ()=>{
+      if(idx >= d.items.length){ vsStartAnswer(d); return; }
+      prog.textContent = `${idx+1} / ${d.items.length}`;
+      nameEl.textContent = d.items[idx];
+      nameEl.style.visibility = 'visible';
+      idx++;
+      const showTime = Math.max(d.speed*0.7, 400);
+      const blank = Math.max(d.speed - showTime, 150);
+      vs.flashTimer = setTimeout(()=>{
+        nameEl.style.visibility = 'hidden';
+        vs.flashTimer = setTimeout(showNext, blank);
+      }, showTime);
+    };
+    showNext();
+  }, wait);
+}
+
+function vsStartAnswer(d){
+  vsShow('vsAnswering');
+  vs.answer = ''; vs.submitted = false;
+  vsUpdateAnswer();
+  document.getElementById('vsAnsweredCount').textContent = '';
+  vs.answerDeadline = Date.now() + d.answerSec*1000;
+  clearInterval(vs.answerTimer);
+  vs.answerTimer = setInterval(()=>{
+    const left = Math.max(0, vs.answerDeadline - Date.now());
+    document.getElementById('vsCountdown').textContent = (left/1000).toFixed(1) + 's';
+    if(left <= 0){
+      clearInterval(vs.answerTimer);
+      if(!vs.submitted) vsSubmit(true);
+      else if(vs.isHost) fetch('/api/room?action=finish',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:vs.code})});
+    }
+  }, 100);
+}
+
+function vsNum(k){
+  if(vs.submitted) return;
+  if(k==='clear') vs.answer='';
+  else if(k==='back') vs.answer = vs.answer.slice(0,-1);
+  else if(vs.answer.length < 6) vs.answer += k;
+  vsUpdateAnswer();
+}
+function vsUpdateAnswer(){
+  const el = document.getElementById('vsAnswerDisplay');
+  if(el) el.textContent = '¥' + (parseInt(vs.answer||'0')).toLocaleString();
+}
+
+async function vsSubmit(auto){
+  if(vs.submitted) return;
+  vs.submitted = true;
+  clearInterval(vs.answerTimer);
+  try{
+    await fetch('/api/room?action=answer',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({code:vs.code,playerId:vs.playerId,value:parseInt(vs.answer||'0')})});
+    if(!auto) showToast('回答しました');
+  }catch(e){ showToast('送信に失敗しました'); }
+}
+
+function vsOnSetResult(d){
+  clearTimeout(vs.flashTimer); clearInterval(vs.answerTimer);
+  vsShow('vsResult');
+  document.getElementById('vsResultTitle').innerHTML = d.practice
+    ? '<div style="font-family:\'Press Start 2P\',monospace;font-size:11px;color:var(--accent4)">PRACTICE</div>'
+    : `<div style="font-family:'Press Start 2P',monospace;font-size:11px;color:var(--accent4)">SET ${d.setNo}</div>`;
+  document.getElementById('vsCorrectTotal').textContent = '¥' + d.total.toLocaleString();
+  document.getElementById('vsResultList').innerHTML = (d.results||[])
+    .sort((a,b)=>(b.correct-a.correct)||(a.gap-b.gap))
+    .map(r=>`<div class="vs-res-row">
+      <span style="flex:1">${esc(r.name)}</span>
+      <span class="${r.correct?'vs-res-ok':'vs-res-ng'}">${r.answer===null?'無回答':'¥'+r.answer.toLocaleString()}</span>
+      <span class="${r.correct?'vs-res-ok':'vs-res-ng'}">${r.correct?'✓':'差'+r.gap.toLocaleString()}</span>
+    </div>`).join('');
+
+  const st = document.getElementById('vsStandings');
+  st.innerHTML = [...(d.players||[])].sort((a,b)=>(b.sets-a.sets)||(a.diff-b.diff))
+    .map(p=>`<div class="vs-res-row"><span style="flex:1">${esc(p.name)}</span><span class="vs-badge">${p.sets}セット</span><span class="vs-sub">差${p.diff.toLocaleString()}</span></div>`).join('');
+
+  const nextBtn = document.getElementById('vsNextBtn');
+  if(d.practice){
+    // 練習後は「準備OK」（全員が押す必要があるのでホスト以外にも表示）
+    vs.awaitingReady = true;
+    nextBtn.textContent = '準備OK ▶';
+    nextBtn.onclick = vsReady;
+    nextBtn.style.display = 'block';
+    document.getElementById('vsWaitHost').textContent = '全員の準備が整うと本戦が始まります';
+    document.getElementById('vsWaitHost').style.display = 'block';
+  } else if(d.isLast){
+    vs.awaitingReady = false;
+    nextBtn.textContent = '最終結果へ ▶';
+    nextBtn.onclick = vsNext;
+    nextBtn.style.display = vs.isHost ? 'block' : 'none';
+    document.getElementById('vsWaitHost').style.display = vs.isHost ? 'none' : 'block';
+  } else {
+    vs.awaitingReady = false;
+    nextBtn.textContent = '次のセットへ ▶';
+    nextBtn.onclick = vsNext;
+    nextBtn.style.display = vs.isHost ? 'block' : 'none';
+    document.getElementById('vsWaitHost').textContent = 'ホストの進行を待っています...';
+    document.getElementById('vsWaitHost').style.display = vs.isHost ? 'none' : 'block';
+  }
+}
+
+async function vsReady(){
+  document.getElementById('vsNextBtn').style.display = 'none';
+  document.getElementById('vsWaitHost').textContent = '他のメンバーの準備を待っています...';
+  document.getElementById('vsWaitHost').style.display = 'block';
+  try{
+    await fetch('/api/room?action=ready',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({code:vs.code,playerId:vs.playerId})});
+  }catch(e){ showToast('送信に失敗しました'); }
+}
+
+async function vsNext(){
+  try{
+    const r = await fetch('/api/room?action=next',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({code:vs.code,playerId:vs.playerId})});
+    const d = await r.json();
+    if(d.error) showToast(d.error);
+  }catch(e){ showToast('進行に失敗しました'); }
+}
+
+function vsOnGameEnd(d){
+  vsShow('vsFinal');
+  const medals = ['🥇','🥈','🥉'];
+  document.getElementById('vsFinalList').innerHTML = (d.ranking||[]).map((p,i)=>`
+    <div class="vs-res-row">
+      <span class="vs-badge">${medals[i]||(i+1)}</span>
+      <span style="flex:1">${esc(p.name)}</span>
+      <span class="vs-res-ok">${p.sets}セット</span>
+      <span class="vs-sub">差${p.diff.toLocaleString()}</span>
+    </div>`).join('');
+}
+
+
+// ===== 年間ランキング =====
+let yrShowAll = false;    // 裏コマンド more で追加ランキングを解禁
+let yrLastData = null;
+
+function yrCmdInput(el){
+  const v = (el.value || '').trim().toLowerCase();
+  if(v === 'more'){
+    el.value = '';
+    el.blur();
+    yrShowAll = true;
+    if(yrLastData) yrRender(yrLastData);
+    showToast('追加ランキングを解禁しました');
+  } else if(v === 'less'){
+    el.value = '';
+    el.blur();
+    yrShowAll = false;
+    if(yrLastData) yrRender(yrLastData);
+  }
+}
+
+function yrOpen(){
+  if(!groupId){ showToast('先にグループに入ってください'); return; }
+  const sel = document.getElementById('yrYear');
+  const thisYear = new Date(Date.now() + 9*3600*1000).getFullYear();
+  if(!sel.options.length){
+    sel.innerHTML = [thisYear, thisYear-1].map(y => `<option value="${y}">${y}年</option>`).join('');
+  }
+  document.getElementById('yrOverlay').classList.remove('hidden');
+  yrLoad();
+}
+
+function yrClose(){ document.getElementById('yrOverlay').classList.add('hidden'); }
+
+async function yrLoad(){
+  const year = document.getElementById('yrYear').value;
+  const body = document.getElementById('yrBody');
+  body.innerHTML = '<div class="yr-empty">集計中...</div>';
+  try{
+    const r = await fetch(`/api/history?action=ranking&groupId=${encodeURIComponent(groupId)}&year=${year}`);
+    const d = await r.json();
+    if(d.error){ body.innerHTML = `<div class="yr-empty">${esc(d.error)}</div>`; return; }
+    yrLastData = d;
+    yrRender(d);
+  }catch(e){
+    body.innerHTML = '<div class="yr-empty">読み込みに失敗しました</div>';
+  }
+}
+
+function yrRender(d){
+  const body = document.getElementById('yrBody');
+  if(!d.byCount || !d.byCount.length){
+    body.innerHTML = `<div class="yr-empty">${d.year}年の記録はまだありません<br><span style="font-size:11px">シフトを取得するたびに記録が貯まっていきます</span></div>`;
+    return;
+  }
+
+  const medal = i => ['🥇','🥈','🥉'][i] || (i+1);
+  const cls   = i => ['top1','top2','top3'][i] || '';
+  const fmtDate = s => { const [,m,dd] = s.split('-'); return `${+m}/${+dd}`; };
+
+  const rankRows = (list, unit) => list.map((p,i) =>
+    `<div class="yr-row ${cls(i)}">
+       <span class="yr-rank">${medal(i)}</span>
+       <span class="yr-name">${esc(p.name)}</span>
+       <span class="yr-val">${p[unit==='回'?'count':'hours']}${unit}</span>
+     </div>`).join('');
+
+  let html = `
+    <div class="yr-hero">
+      <div class="yr-year">${esc(String(d.year))}</div>
+      <div class="yr-sub">みんなのシフト一年まとめ</div>
+    </div>
+    <div class="yr-stats">
+      <div class="yr-stat"><div class="yr-stat-n">${d.recordedDays}</div><div class="yr-stat-l">稼働日</div></div>
+      <div class="yr-stat"><div class="yr-stat-n">${d.totalShifts}</div><div class="yr-stat-l">のべ出勤</div></div>
+      <div class="yr-stat"><div class="yr-stat-n">${Math.round(d.totalHours)}</div><div class="yr-stat-l">総時間</div></div>
+    </div>
+
+    <div><div class="yr-sec">🔥 出勤回数ランキング</div>${rankRows(d.byCount,'回')}</div>
+    <div><div class="yr-sec">⏱ 合計時間ランキング</div>${rankRows(d.byHours,'h')}</div>`;
+
+  // ここから下は裏コマンド more で解禁される追加ランキング
+  if(yrShowAll){
+    const dayRows = arr => arr.map(b =>
+      `<div class="yr-row"><span class="yr-name">${fmtDate(b.date)}</span><span class="yr-val">${b.people}人</span></div>`).join('');
+
+    if(d.busiest && d.busiest.length){
+      html += `<div><div class="yr-sec">👥 人が多かった日</div>${dayRows(d.busiest)}</div>`;
+    }
+    if(d.quietest && d.quietest.length){
+      html += `<div><div class="yr-sec">🏜 人が少なかった日</div>${dayRows(d.quietest)}</div>`;
+    }
+    if(d.bestPairs && d.bestPairs.length){
+      html += `<div><div class="yr-sec">🤝 よく一緒になったコンビ</div>` +
+        d.bestPairs.map(p => `<div class="yr-row"><span class="yr-name">${esc(p.pair[0])} & ${esc(p.pair[1])}</span><span class="yr-val">${p.count}回</span></div>`).join('') +
+        `</div>`;
+    }
+  }
+
+  html += `<div class="yr-sub" style="text-align:center">記録期間：${d.months.length?esc(d.months[0])+' 〜 '+esc(d.months[d.months.length-1]):'—'}</div>`;
+
+  // 最下部の空白行（裏コマンド：more で全員表示）
+  html += `<div class="yr-row yr-secret">
+      <span class="yr-rank"></span>
+      <input class="yr-cmd" id="yrCmd" type="text" autocomplete="off" autocapitalize="off"
+             spellcheck="false" oninput="yrCmdInput(this)">
+    </div>`;
+
+  body.innerHTML = html;
+}
+
+// ===== 現場アンケート（不定期ランダム・1画面完結） =====
+const SV_SCALES = {
+  crowd: { min: 'ガラガラ', max: '満員' },
+  food:  { min: '完売',     max: 'だいぶ余った' },
+};
+const SV_CHANCE = 0.4;        // 条件を満たした時に出る確率
+const SV_WINDOW_DAYS = 14;    // シフト終了〜何日後までを対象にするか
+
+let svState = { date: null, eventName: null, worked: null, answers: {} };
+let svEventMap = {};
+
+function svKey(date){ return 'survey_done_' + groupId + '_' + date; }
+
+// 端末ごとの匿名ID（同じ人の二重回答を防ぐだけに使う）
+function svUid(){
+  let id = localStorage.getItem('survey_uid');
+  if(!id){ id = 'u_' + Math.random().toString(36).slice(2,10); localStorage.setItem('survey_uid', id); }
+  return id;
+}
+
+// 対象日を探す：グループの誰かがシフトに入った日で、
+// 「その日の最終終了時刻を過ぎている」かつ「14日以内」かつ「未回答」
+function svFindTargetDate(){
+  if(!lastResults) return null;
+  const nowJst = new Date(Date.now() + 9*60*60*1000);
+  const todayStr = nowJst.toISOString().slice(0,10);
+  const nowMin = nowJst.getUTCHours()*60 + nowJst.getUTCMinutes();
+  const limit = new Date(nowJst.getTime() - SV_WINDOW_DAYS*24*60*60*1000).toISOString().slice(0,10);
+
+  // 日付ごとに「その日の最も遅い終了時刻」を集める
+  const endByDate = {};
+  for(const r of lastResults){
+    for(const sh of (r.shifts || [])){
+      if(!sh || !sh.date || !sh.end) continue;
+      const [h,m] = String(sh.end).split(':').map(Number);
+      if(isNaN(h)) continue;
+      const mins = h*60 + (m||0);
+      if(endByDate[sh.date] === undefined || mins > endByDate[sh.date]) endByDate[sh.date] = mins;
+    }
+  }
+
+  const cands = Object.keys(endByDate)
+    .filter(d => {
+      if(d > todayStr) return false;                    // 未来は対象外
+      if(d < limit) return false;                        // 14日より前は締め切り
+      if(d === todayStr && nowMin < endByDate[d]) return false; // 当日はシフト終了後のみ
+      try{ if(localStorage.getItem(svKey(d))) return false; }catch(e){}
+      return true;
+    })
+    .sort().reverse();
+
+  return cands.length ? cands[0] : null;
+}
+
+function svMaybeAsk(){
+  try{
+    const ov = document.getElementById('svOverlay');
+    if(!ov || !ov.classList.contains('hidden')) return;
+    const today = new Date(Date.now() + 9*60*60*1000).toISOString().slice(0,10);
+    if(localStorage.getItem('survey_lastAsk_' + groupId) === today) return;
+
+    const date = svFindTargetDate();
+    if(!date) return;
+    if(Math.random() > SV_CHANCE) return;
+
+    localStorage.setItem('survey_lastAsk_' + groupId, today);
+    svOpen(date);
+  }catch(e){}
+}
+
+function svOpen(date){
+  const ev = svEventMap[date];
+  svState = { date, eventName: ev ? ev.name : null, worked: null, answers: {} };
+
+  const dt = new Date(date + 'T00:00:00');
+  const dow = ['日','月','火','水','木','金','土'][dt.getDay()];
+  document.getElementById('svDate').textContent = `${dt.getMonth()+1}/${dt.getDate()}（${dow}）の現場`;
+  document.getElementById('svEvent').textContent = ev ? `🎪 ${ev.name}` : '';
+
+  // 出勤したか
+  document.getElementById('svWorked').innerHTML =
+    ['入ってた','入ってない'].map(o =>
+      `<button class="sv-opt" onclick="svPickWorked('${o}',this)">${o}</button>`
+    ).join('');
+
+  // 1〜5スケール
+  for(const [field, cfg] of Object.entries(SV_SCALES)){
+    const box = document.getElementById('sv' + field[0].toUpperCase() + field.slice(1));
+    if(!box) continue;
+    box.innerHTML =
+      `<span class="sv-end">${esc(cfg.min)}</span>` +
+      [1,2,3,4,5].map(n => `<button class="sv-opt sv-num" onclick="svPick('${field}',${n},this)">${n}</button>`).join('') +
+      `<span class="sv-end">${esc(cfg.max)}</span>`;
+  }
+
+  // アルコール
+  document.getElementById('svAlcohol').innerHTML =
+    ['あり','なし','わからない'].map(o =>
+      `<button class="sv-opt" onclick="svPick('alcohol','${o}',this)">${o}</button>`
+    ).join('');
+
+  document.getElementById('svDetail').style.display = 'none';
+  document.getElementById('svSend').style.display = 'none';
+  document.getElementById('svOverlay').classList.remove('hidden');
+}
+
+// 「入ってた／入ってない」を選んだとき
+function svPickWorked(value, el){
+  svState.worked = value;
+  el.parentElement.querySelectorAll('.sv-opt').forEach(b => b.classList.remove('sel'));
+  el.classList.add('sel');
+
+  if(value === '入ってない'){
+    // 残りは聞かずにその場で記録して閉じる
+    svSend(false);
+  } else {
+    document.getElementById('svDetail').style.display = 'flex';
+    document.getElementById('svSend').style.display = 'block';
+  }
+}
+
+function svPick(field, value, el){
+  svState.answers[field] = value;
+  el.parentElement.querySelectorAll('.sv-opt').forEach(b => b.classList.remove('sel'));
+  el.classList.add('sel');
+}
+
+function svClose(){ document.getElementById('svOverlay').classList.add('hidden'); }
+
+// ✕ / スキップ：その日はもう聞かない
+function svSkip(){
+  try{ if(svState.date) localStorage.setItem(svKey(svState.date), 'skipped'); }catch(e){}
+  svClose();
+}
+
+function svSubmit(){
+  const a = svState.answers;
+  if(!a.crowd && !a.food && !a.alcohol){ showToast('ひとつ以上選んでください'); return; }
+  svSend(true);
+}
+
+async function svSend(withDetail){
+  const a = svState.answers;
+  try{
+    await fetch('/api/survey?action=submit', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        groupId,
+        uid: svUid(),
+        date: svState.date,
+        name: (typeof getMyApplyName === 'function' ? getMyApplyName() : null) || null,
+        eventName: svState.eventName,
+        worked: svState.worked,
+        crowd:   withDetail ? (a.crowd   || null) : null,
+        food:    withDetail ? (a.food    || null) : null,
+        alcohol: withDetail ? (a.alcohol || null) : null,
+      })
+    });
+    try{ localStorage.setItem(svKey(svState.date), 'answered'); }catch(e){}
+    svClose();
+    showToast('ありがとう！記録しました');
+  }catch(e){
+    svClose();
+    showToast('送信に失敗しました');
+  }
+}
+
+// ===== ユーティリティ =====
+function copyGroupId(){
+  const url=`${location.origin}${location.pathname}?g=${groupId}`;
+  const text=`しふとまとめれ～るに招待します！\nグループID: ${groupId}\n${url}`;
+  if(navigator.share){
+    navigator.share({title:'しふとまとめれ～る',text});
+  }else{
+    navigator.clipboard.writeText(text).then(()=>showToast('招待リンクをコピーしました！'));
+  }
+}
+function maskCiftrUrl(url){
+  if(!url) return url;
+  // クエリパラメータ型: ?s=xxxxx → ?s=****
+  if(/[?&]s=/.test(url)){
+    return url.replace(/([?&]s=)[^&]+/, '$1****');
+  }
+  // パス型: /staff/login/2071/132626/967730 → /staff/login/****/****/****
+  const m = url.match(/^(https?:\/\/[^\/]+\/[^\/]+\/login)(\/.+)$/);
+  if(m){
+    const segments = m[2].split('/').filter(Boolean);
+    const masked = segments.map(()=>'****').join('/');
+    return m[1] + '/' + masked;
+  }
+  return url;
+}
+
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2500); }
+function setStatus(t){ document.getElementById('statusText').textContent=t; }
+
+// ===== マイページ =====
+let myData = null;
+
+function openMypage(){
+  document.getElementById('mypageModal').classList.remove('hidden');
+  const savedId = localStorage.getItem('myUserId');
+  if(savedId && myData){
+    showMypageMain();
+  } else if(savedId){
+    document.getElementById('myUserId').value = savedId;
+    loginMypage();
+  }
+}
+
+function closeMypage(){
+  document.getElementById('mypageModal').classList.add('hidden');
+}
+
+function closeMypageModal(e){
+  if(e.target.id==='mypageModal') closeMypage();
+}
+
+async function loginMypage(){
+  const userId = document.getElementById('myUserId').value.trim();
+  if(!userId){ showToast('IDを入力してください'); return; }
+  if(!/^[a-zA-Z0-9_-]{6,}$/.test(userId)){
+    showToast('英数字6文字以上で入力してください'); return;
+  }
+  try{
+    const r = await fetch(`/api/mypage?userId=${encodeURIComponent(userId)}`);
+    if(r.status===404){
+      // 新規登録へ
+      localStorage.setItem('myUserId', userId);
+      document.getElementById('mypageLogin').style.display='none';
+      document.getElementById('mypageRegister').style.display='block';
+      if(groupId) document.getElementById('regGroupId').value = groupId;
+      return;
+    }
+    const d = await r.json();
+    myData = d;
+    localStorage.setItem('myUserId', userId);
+    showMypageMain();
+  }catch(e){ showToast('エラーが発生しました'); }
+}
+
+async function registerMypage(){
+  const userId = localStorage.getItem('myUserId');
+  const groupId2 = document.getElementById('regGroupId').value.trim();
+  const nickname = document.getElementById('regNickname').value.trim();
+  if(!groupId2||!nickname){ showToast('グループIDとニックネームは必須です'); return; }
+  try{
+    const r = await fetch('/api/mypage?action=register',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({userId,nickname,groupId:groupId2})
+    });
+    const d = await r.json();
+    if(d.error){ showToast(d.error); return; }
+    myData = d;
+    showMypageMain();
+  }catch(e){ showToast('登録に失敗しました'); }
+}
+
+function showMypageMain(){
+  document.getElementById('mypageLogin').style.display='none';
+  document.getElementById('mypageRegister').style.display='none';
+  document.getElementById('mypageMain').style.display='block';
+  document.getElementById('mypageTitle').textContent='MY PAGE';
+
+  const nameEl = document.getElementById('myNicknameDisplay');
+  nameEl.textContent = myData.nickname;
+  document.getElementById('myGroupDisplay').textContent = 'グループ: '+myData.groupId;
+
+  loadMyRank();
+}
+
+function logoutMypage(){
+  localStorage.removeItem('myUserId');
+  myData = null;
+  document.getElementById('mypageMain').style.display='none';
+  document.getElementById('mypageLogin').style.display='block';
+  document.getElementById('myUserId').value='';
+  closeMypage();
+}
+
+// ===== タブ =====
+document.querySelectorAll('.tab').forEach(tab=>{
+  tab.addEventListener('click',()=>{
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('view-'+tab.dataset.tab).classList.add('active');
+  });
+});
+
+// 起動
+const savedId=localStorage.getItem('shiftGroupId');
+if(savedId) enterGroup(savedId);
+
+// アプリに戻ってきた時（ホーム画面から再表示など）も最新を確認
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState==='visible' && groupId && members.length){
+    bgRefresh(); // 30秒デバウンス付きなので連発しても安全
+  }
+});
+</script>
+</body>
+</html>
