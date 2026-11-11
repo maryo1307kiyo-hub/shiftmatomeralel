@@ -5,7 +5,7 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const { year, month } = req.query;
+  const { year, month, debug } = req.query;
   if (!year || !month) return res.status(400).json({ error: 'year and month required' });
 
   const url = `https://www.yokohama-arena.co.jp/event/${year}-${String(month).padStart(2,'0')}`;
@@ -23,6 +23,28 @@ export default async function handler(req, res) {
 
     const html = await response.text();
     const events = parseEvents(html);
+
+    // 0件のときは原因が分かるよう自動で診断情報を付ける（debug=1でも強制表示）
+    if (events.length === 0 || debug === '1') {
+      const text = html
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/\s+/g, ' ');
+      return res.status(200).json({
+        events,
+        diag: {
+          url,
+          status: response.status,
+          htmlLength: html.length,
+          hasDate: /\d{4}\.\d{2}\.\d{2}/.test(text),
+          dateSamples: (text.match(/\d{4}\.\d{2}\.\d{2}[^0-9]{0,40}/g) || []).slice(0, 8),
+          hasDetailLink: /\/event\/detail\//.test(html),
+          textHead: text.slice(0, 900),
+        },
+      });
+    }
+
     return res.status(200).json({ events });
   } catch(e) {
     return res.status(500).json({ error: e.message });
