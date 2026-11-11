@@ -180,6 +180,30 @@
     .vs-res-row{display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--border);font-size:13px}
     .vs-res-ok{color:var(--accent3)}
     .vs-res-ng{color:var(--muted)}
+    /* 年間ランキング */
+    .yr-overlay{position:fixed;inset:0;background:var(--bg);z-index:370;display:flex;flex-direction:column;overflow-y:auto}
+    .yr-overlay.hidden{display:none}
+    .yr-header{background:var(--surface);border-bottom:var(--px) solid var(--accent4);padding:8px 14px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:5}
+    .yr-title{font-family:'Press Start 2P',monospace;font-size:8px;color:var(--accent4)}
+    .yr-body{padding:16px;display:flex;flex-direction:column;gap:18px;max-width:420px;margin:0 auto;width:100%}
+    .yr-hero{text-align:center;padding:10px 0}
+    .yr-year{font-family:'Press Start 2P',monospace;font-size:26px;color:var(--accent4);letter-spacing:2px}
+    .yr-sub{font-size:11px;color:var(--muted);margin-top:6px}
+    .yr-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+    .yr-stat{background:var(--surface);border:var(--px) solid var(--border);padding:10px 4px;text-align:center}
+    .yr-stat-n{font-family:'Press Start 2P',monospace;font-size:14px;color:var(--accent3)}
+    .yr-stat-l{font-size:10px;color:var(--muted);margin-top:4px}
+    .yr-sec{font-size:12px;color:var(--accent4);border-bottom:var(--px) solid var(--border);padding-bottom:4px;margin-bottom:8px}
+    .yr-row{display:flex;align-items:center;gap:8px;padding:7px 8px;font-size:13px;border-bottom:1px solid var(--border)}
+    .yr-row.top1{background:#cc883318;border-left:3px solid #ffcc44}
+    .yr-row.top2{background:#99999910;border-left:3px solid #bbbbbb}
+    .yr-row.top3{background:#aa663310;border-left:3px solid #cc8855}
+    .yr-rank{font-family:'Press Start 2P',monospace;font-size:10px;color:var(--muted);min-width:26px}
+    .yr-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .yr-val{font-family:'Press Start 2P',monospace;font-size:10px;color:var(--accent3)}
+    .yr-secret{opacity:.55}
+    .yr-cmd{flex:1;background:transparent;border:none;outline:none;color:var(--text);font-family:'DotGothic16',monospace;font-size:13px;padding:0;width:100%}
+    .yr-empty{font-size:12px;color:var(--muted);text-align:center;padding:30px 10px;line-height:2}
     /* 現場アンケート */
     .sv-overlay{position:fixed;inset:0;background:#000000aa;z-index:380;display:flex;align-items:flex-end}
     .sv-overlay.hidden{display:none}
@@ -398,6 +422,7 @@
     <button class="menu-item-btn" onclick="openMypage();closeMenu()" title="マイページ">👤</button>
     <button class="menu-item-btn" onclick="openFortune();closeMenu()" title="今日の運勢">🔮</button>
     <button class="menu-item-btn" onclick="openFlashGameSetup();closeMenu()" title="フラッシュ会計">🧮</button>
+    <button class="menu-item-btn menu-item-text" onclick="yrOpen();closeMenu()" title="年間ランキング">🏆年間</button>
     <button class="menu-item-btn menu-item-vs" onclick="vsOpen();closeMenu()" title="フラッシュ対戦">対戦</button>
     <button class="menu-item-btn menu-item-text" onclick="openApplyMenu();closeMenu()" title="シフト申請">シフト申請</button>
   </div>
@@ -517,6 +542,16 @@
     </div>
 
   </div>
+</div>
+
+<!-- 年間ランキング -->
+<div class="yr-overlay hidden" id="yrOverlay">
+  <div class="yr-header">
+    <span class="yr-title">🏆 年間ランキング</span>
+    <select id="yrYear" onchange="yrLoad()" style="background:#080814;border:var(--px) solid var(--muted);color:var(--text);font-family:inherit;font-size:13px;padding:4px 8px;outline:none"></select>
+    <button class="btn-px btn-red btn-sm" onclick="yrClose()">EXIT</button>
+  </div>
+  <div class="yr-body" id="yrBody"></div>
 </div>
 
 <!-- 現場アンケート -->
@@ -2422,6 +2457,116 @@ function vsOnGameEnd(d){
     </div>`).join('');
 }
 
+
+// ===== 年間ランキング =====
+let yrShowAll = false;    // 裏コマンド more で追加ランキングを解禁
+let yrLastData = null;
+
+function yrCmdInput(el){
+  const v = (el.value || '').trim().toLowerCase();
+  if(v === 'more'){
+    el.value = '';
+    el.blur();
+    yrShowAll = true;
+    if(yrLastData) yrRender(yrLastData);
+    showToast('追加ランキングを解禁しました');
+  } else if(v === 'less'){
+    el.value = '';
+    el.blur();
+    yrShowAll = false;
+    if(yrLastData) yrRender(yrLastData);
+  }
+}
+
+function yrOpen(){
+  if(!groupId){ showToast('先にグループに入ってください'); return; }
+  const sel = document.getElementById('yrYear');
+  const thisYear = new Date(Date.now() + 9*3600*1000).getFullYear();
+  if(!sel.options.length){
+    sel.innerHTML = [thisYear, thisYear-1].map(y => `<option value="${y}">${y}年</option>`).join('');
+  }
+  document.getElementById('yrOverlay').classList.remove('hidden');
+  yrLoad();
+}
+
+function yrClose(){ document.getElementById('yrOverlay').classList.add('hidden'); }
+
+async function yrLoad(){
+  const year = document.getElementById('yrYear').value;
+  const body = document.getElementById('yrBody');
+  body.innerHTML = '<div class="yr-empty">集計中...</div>';
+  try{
+    const r = await fetch(`/api/history?action=ranking&groupId=${encodeURIComponent(groupId)}&year=${year}`);
+    const d = await r.json();
+    if(d.error){ body.innerHTML = `<div class="yr-empty">${esc(d.error)}</div>`; return; }
+    yrLastData = d;
+    yrRender(d);
+  }catch(e){
+    body.innerHTML = '<div class="yr-empty">読み込みに失敗しました</div>';
+  }
+}
+
+function yrRender(d){
+  const body = document.getElementById('yrBody');
+  if(!d.byCount || !d.byCount.length){
+    body.innerHTML = `<div class="yr-empty">${d.year}年の記録はまだありません<br><span style="font-size:11px">シフトを取得するたびに記録が貯まっていきます</span></div>`;
+    return;
+  }
+
+  const medal = i => ['🥇','🥈','🥉'][i] || (i+1);
+  const cls   = i => ['top1','top2','top3'][i] || '';
+  const fmtDate = s => { const [,m,dd] = s.split('-'); return `${+m}/${+dd}`; };
+
+  const rankRows = (list, unit) => list.map((p,i) =>
+    `<div class="yr-row ${cls(i)}">
+       <span class="yr-rank">${medal(i)}</span>
+       <span class="yr-name">${esc(p.name)}</span>
+       <span class="yr-val">${p[unit==='回'?'count':'hours']}${unit}</span>
+     </div>`).join('');
+
+  let html = `
+    <div class="yr-hero">
+      <div class="yr-year">${esc(String(d.year))}</div>
+      <div class="yr-sub">みんなのシフト一年まとめ</div>
+    </div>
+    <div class="yr-stats">
+      <div class="yr-stat"><div class="yr-stat-n">${d.recordedDays}</div><div class="yr-stat-l">稼働日</div></div>
+      <div class="yr-stat"><div class="yr-stat-n">${d.totalShifts}</div><div class="yr-stat-l">のべ出勤</div></div>
+      <div class="yr-stat"><div class="yr-stat-n">${Math.round(d.totalHours)}</div><div class="yr-stat-l">総時間</div></div>
+    </div>
+
+    <div><div class="yr-sec">🔥 出勤回数ランキング</div>${rankRows(d.byCount,'回')}</div>
+    <div><div class="yr-sec">⏱ 合計時間ランキング</div>${rankRows(d.byHours,'h')}</div>`;
+
+  // ここから下は裏コマンド more で解禁される追加ランキング
+  if(yrShowAll){
+    const dayRows = arr => arr.map(b =>
+      `<div class="yr-row"><span class="yr-name">${fmtDate(b.date)}</span><span class="yr-val">${b.people}人</span></div>`).join('');
+
+    if(d.busiest && d.busiest.length){
+      html += `<div><div class="yr-sec">👥 人が多かった日</div>${dayRows(d.busiest)}</div>`;
+    }
+    if(d.quietest && d.quietest.length){
+      html += `<div><div class="yr-sec">🏜 人が少なかった日</div>${dayRows(d.quietest)}</div>`;
+    }
+    if(d.bestPairs && d.bestPairs.length){
+      html += `<div><div class="yr-sec">🤝 よく一緒になったコンビ</div>` +
+        d.bestPairs.map(p => `<div class="yr-row"><span class="yr-name">${esc(p.pair[0])} & ${esc(p.pair[1])}</span><span class="yr-val">${p.count}回</span></div>`).join('') +
+        `</div>`;
+    }
+  }
+
+  html += `<div class="yr-sub" style="text-align:center">記録期間：${d.months.length?esc(d.months[0])+' 〜 '+esc(d.months[d.months.length-1]):'—'}</div>`;
+
+  // 最下部の空白行（裏コマンド：more で全員表示）
+  html += `<div class="yr-row yr-secret">
+      <span class="yr-rank"></span>
+      <input class="yr-cmd" id="yrCmd" type="text" autocomplete="off" autocapitalize="off"
+             spellcheck="false" oninput="yrCmdInput(this)">
+    </div>`;
+
+  body.innerHTML = html;
+}
 
 // ===== 現場アンケート（不定期ランダム・1画面完結） =====
 const SV_SCALES = {
