@@ -190,7 +190,62 @@ export default async function handler(req, res) {
   // 正常取得 → キャッシュ保存
   await redisSet(pendingCacheKey, prevPendingCache);
   await redisSet(cacheKey, data);
+
+  // 確定シフトを履歴として永続記録（失敗しても表示には影響させない）
+  try {
+    await recordHistory(groupId, results, redisGet, redisSet);
+  } catch (e) {
+    console.error('history record error:', e.message);
+  }
+
   return res.status(200).json(data);
+}
+
+// ===== シフト履歴の記録 =====
+// 月ごとのバケツ history:{groupId}:{YYYY-MM} に
+// { "2026-11-07": { "くらち": "16:00-19:00", ... } } の形で貯める。
+// ciftrから消えた過去の日付も消さずに残し続けるのが目的。
+async function recordHistory(groupId, results, redisGet, redisSet) {
+  // 今回取得できた確定シフトを月別にまとめる
+  const byMonth = {};
+  for (const r of (results || [])) {
+    if (!r || !r.name) continue;
+    for (const sh of (r.shifts || [])) {
+      if (!sh || !sh.date || !sh.start || !sh.end) continue;
+      const m = String(sh.date).slice(0, 7);
+      if (!/^\d{4}-\d{2}$/.test(m)) continue;
+      byMonth[m] = byMonth[m] || {};
+      byMonth[m][sh.date] = byMonth[m][sh.date] || {};
+      byMonth[m][sh.date][r.name] = `${sh.start}-${sh.end}`;
+    }
+  }
+  if (!Object.keys(byMonth).length) return;
+
+  const idxKey = `history-index:${groupId}`;
+  const knownMonths = (await redisGet(idxKey)) || [];
+  let idxChanged = false;
+
+  for (const [m, days] of Object.entries(byMonth)) {
+    const key = `history:${groupId}:${m}`;
+    const stored = (await redisGet(key)) || {};
+
+    // 今回見えた日付だけ上書き。見えなくなった過去の日付はそのまま残す
+    let changed = false;
+    for (const [date, people] of Object.entries(days)) {
+      if (JSON.stringify(stored[date] || {}) !== JSON.stringify(people)) {
+        stored[date] = people;
+        changed = true;
+      }
+    }
+    if (changed) await redisSet(key, stored);
+
+    if (!knownMonths.includes(m)) { knownMonths.push(m); idxChanged = true; }
+  }
+
+  if (idxChanged) {
+    knownMonths.sort();
+    await redisSet(idxKey, knownMonths);
+  }
 }
 
 // JSTの今日の日付を "YYYY-MM-DD" で返す
