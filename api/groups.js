@@ -60,8 +60,32 @@ export default async function handler(req, res) {
     if (action === 'rename') {
       const { url, oldName, newName } = body;
       if (!url || !newName) return res.status(400).json({ error: 'url and newName required' });
+      const before = members.find(m => m.url === url);
+      if (before && before.name !== newName && members.some(m => m.name === newName)) {
+        return res.status(409).json({ error: 'その名前は既に使われています' });
+      }
       members = members.map(m => m.url === url ? { ...m, name: newName } : m);
       await redisSet(key, members);
+      // 個人アカウント（api/auth.js）の名前も追従させる。失敗しても改名自体は成立させる
+      try {
+        if (before && before.name !== newName) {
+          const { createHash } = await import('node:crypto');
+          const h = (n) => createHash('sha1').update(String(n)).digest('hex').slice(0, 20);
+          const oldKey = `account-name:${groupId}:${h(before.name)}`;
+          const accId = await redisGet(oldKey);
+          if (accId) {
+            const acc = await redisGet(`account:${groupId}:${accId}`);
+            if (acc) {
+              acc.name = newName;
+              await redisSet(`account:${groupId}:${accId}`, acc);
+              await redisSet(`account-name:${groupId}:${h(newName)}`, accId);
+              await fetch(`${UPSTASH_URL}/del/${encodeURIComponent(oldKey)}`, {
+                method: 'POST', headers: { Authorization: `Bearer ${UPSTASH_TOKEN}` }
+              });
+            }
+          }
+        }
+      } catch (e) {}
       return res.status(200).json({ members });
     }
 
