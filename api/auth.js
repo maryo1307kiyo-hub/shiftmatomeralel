@@ -6,6 +6,7 @@
 //   ※1人1キーにしてあるので、同時に登録されても他人の分を上書きしない
 //   session:{token}      … { groupId, accountId, ver, ref }   （1年で自動失効・開くたびに延長）
 //   handoff:{code}       … { groupId, accountId }             （10分・1回限り）
+//   url-index:{リンクID}  … { groupId, name }  （api/groups.js が書く。リンク＋PINログイン用）
 //   auth-fail:{groupId}:{accountId} … { n }                   （PIN間違いの回数・10分で消える）
 
 import crypto from 'node:crypto';
@@ -81,6 +82,14 @@ export default async function handler(req, res) {
     });
     const d = await r.json();
     return (d.result || []).map(v => { try { return v ? JSON.parse(v) : null; } catch (e) { return null; } });
+  }
+
+  // groups.js と同じ規則（s= の値、無ければパス）
+  function linkId(url) {
+    const s = String(url || '').match(/[?&]s=([A-Za-z0-9]+)/);
+    if (s) return 's:' + s[1];
+    const m = String(url || '').match(/^https?:\/\/[^\/]+(\/[^?#]*)/);
+    return m ? 'p:' + m[1].replace(/\/+$/, '').toLowerCase() : null;
   }
 
   const nameHash = (name) => crypto.createHash('sha1').update(String(name)).digest('hex').slice(0, 20);
@@ -165,6 +174,22 @@ export default async function handler(req, res) {
     }
 
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
+    // ---- シフターリンクから「どのグループの誰か」を引く（最初の画面のリンク＋PINログイン用） ----
+    if (action === 'link-lookup') {
+      const url = String(body.url || '');
+      if (!url.includes('ciftr.jp')) return res.status(400).json({ error: 'ciftr.jpのリンクを貼ってください' });
+      const id = linkId(url);
+      if (!id) return res.status(400).json({ error: 'リンクの形が正しくありません' });
+      const hit = await redisGet(`url-index:${id}`);
+      if (!hit) return res.status(200).json({ found: false });
+      // 対応表が古い場合に備えて、今もそのグループにそのリンクで居るかを確かめる
+      const members = await getMembers(hit.groupId);
+      const me = members.find(m => linkId(m.url) === id);
+      if (!me) return res.status(200).json({ found: false });
+      const acc = await findByName(hit.groupId, me.name);
+      return res.status(200).json({ found: true, groupId: hit.groupId, name: me.name, hasPin: !!(acc && acc.pinHash) });
+    }
 
     // ---- 初回：PINを決める ----
     if (action === 'register') {
