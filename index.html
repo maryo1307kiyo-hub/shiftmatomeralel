@@ -330,7 +330,16 @@
       <!-- シフターのリンク＋PIN（はじめての人も、戻ってきた人もここから） -->
       <div class="px-card" id="gsLoginCard">
         <div class="px-label">LOGIN / はじめての人も</div>
-        <div style="font-size:11px;color:var(--muted);line-height:1.6;">自分のシフターのリンクを貼って、PINを入れてください。<br>はじめての人は、ここで好きなPINを決めます。</div>
+        <div style="font-size:12px;line-height:1.7;">自分のシフターのリンクと、PIN（数字4桁）を入れて「NEXT」を押してください。</div>
+        <details id="gsHelp" style="font-size:11px;color:var(--muted);line-height:1.7;border:2px dashed var(--border);padding:8px 10px;">
+          <summary style="cursor:pointer;color:var(--accent);font-size:12px;">まだ登録していない人へ（はじめての設定）</summary>
+          <div style="margin-top:6px;">
+            ① ciftrのシフト確認ページのアドレスを貼る<br>
+            ② 好きな数字4桁を決める（PIN）<br>
+            ③ NEXT → 案内どおりに進めば完了<br>
+            <span style="color:var(--accent3);">PINを忘れたら管理者へ</span>
+          </div>
+        </details>
         <input type="url" id="gsLink" placeholder="シフターのリンク（https://m-s1.ciftr.jp/...）" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" oninput="gsReset()">
         <input type="password" id="gsPin" class="gs-pin" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off" placeholder="PIN（数字4桁〜）">
 
@@ -352,6 +361,7 @@
 
       <div class="px-card">
         <div class="px-label">ログインせずに見るだけ</div>
+        <div style="font-size:11px;color:var(--muted);">シフトを見るだけならこちら</div>
         <input type="text" id="joinGroupId" placeholder="グループID" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
         <button class="btn-px btn-ghost" onclick="joinGroup()" style="width:100%;padding:10px;">見る ▶</button>
       </div>
@@ -834,17 +844,10 @@
         <button class="btn-px btn-ghost btn-sm" style="margin-top:10px;width:100%;" onclick="myShiftOpenCiftr()">シフターを開く ▶</button>
       </div>
 
-      <!-- ステータス -->
-      <div class="px-card" style="margin-bottom:10px;">
-        <div class="px-label">TODAY</div>
-        <div class="stat-row"><span class="stat-label">🦁 LION RUN 本日順位</span><span class="stat-value" id="myRankDisplay">-</span></div>
-      </div>
-
       <div class="px-card" style="margin-bottom:10px;">
         <div class="px-label">ACCOUNT</div>
         <div class="stat-row"><span class="stat-label">シフターURL</span><span class="stat-value" id="myUrlDisplay" style="font-size:10px;">-</span></div>
         <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px;">
-          <button class="btn-px btn-ghost btn-sm" onclick="authEditMyUrl()">🔗 自分のシフターURLを差し替える</button>
           <button class="btn-px btn-ghost btn-sm" onclick="authHandoff()">📱 別の端末に引き継ぐ</button>
           <button class="btn-px btn-ghost btn-sm" onclick="authChangePin()">🔑 PINを変える</button>
         </div>
@@ -3451,7 +3454,6 @@ function showMypageMain(){
   ud.textContent = url ? url.replace(/^https?:\/\//,'') : '未登録';
   ud.style.wordBreak = 'break-all';
 
-  loadMyRank();
   myShiftLoad(false);
 }
 
