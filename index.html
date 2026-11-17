@@ -180,6 +180,24 @@
     .vs-res-row{display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--border);font-size:13px}
     .vs-res-ok{color:var(--accent3)}
     .vs-res-ng{color:var(--muted)}
+    /* 寄せ書き */
+    .yg-overlay{position:fixed;inset:0;background:var(--bg);z-index:380;display:flex;flex-direction:column;overflow-y:auto}
+    .yg-overlay.hidden{display:none}
+    .yg-header{background:var(--surface);border-bottom:var(--px) solid var(--accent4);padding:8px 14px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:5}
+    .yg-title{font-family:'Press Start 2P',monospace;font-size:8px;color:var(--accent4)}
+    .yg-body{padding:16px;display:flex;flex-direction:column;gap:16px;max-width:420px;margin:0 auto;width:100%}
+    .yg-lead{font-size:12px;color:var(--muted);line-height:1.7}
+    .yg-to{font-size:18px;font-weight:bold;text-align:center;line-height:1.6;padding:8px 0}
+    .yg-card{background:var(--surface);border:var(--px) solid var(--accent4);box-shadow:4px 4px 0 #00000055;padding:14px;display:flex;flex-direction:column;gap:10px}
+    .yg-text{font-size:14px;line-height:1.8;white-space:pre-wrap;word-break:break-word}
+    .yg-from{font-size:12px;color:var(--accent4);text-align:right}
+    .yg-name{font-size:15px;font-weight:bold}
+    .yg-card textarea{background:#080814;border:var(--px) solid var(--muted);color:var(--text);font-family:inherit;font-size:16px;line-height:1.6;padding:8px 10px;outline:none;width:100%;min-height:96px;resize:vertical;-webkit-appearance:none}
+    .yg-card textarea:focus{border-color:var(--accent4)}
+    .yg-row{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;color:var(--muted)}
+    .menu-item-yg{width:auto;min-width:80px;font-size:11px;font-family:'DotGothic16',monospace;color:var(--accent4);border-color:var(--accent4);box-shadow:3px 3px 0 #00000066;}
+    .yg-admin-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12px;padding:6px 0;border-bottom:1px dashed var(--border)}
+
     /* 年間ランキング */
     .yr-overlay{position:fixed;inset:0;background:var(--bg);z-index:370;display:flex;flex-direction:column;overflow-y:auto}
     .yr-overlay.hidden{display:none}
@@ -409,6 +427,16 @@
             <div style="font-size:11px;color:var(--muted);">リセットすると次回そのメンバーは再設定が必要になります</div>
             <button class="btn-px btn-primary" style="background:var(--accent2);" onclick="adminResetPassword()">パスワードをリセット</button>
             <button class="btn-px btn-primary" style="background:var(--accent2);" onclick="adminResetPin()">ログインPINをリセット</button>
+            <div style="border-top:1px dashed var(--border);padding-top:10px;font-size:12px;color:var(--accent4);">寄せ書き</div>
+            <div style="font-size:11px;color:var(--muted);line-height:1.6;">上で選んだメンバーを対象にすると、本人以外のログイン済みメンバーのMENUに「寄せ書き」が出ます。本人には「公開する」を押すまで一切見えません。</div>
+            <div style="font-size:11px;color:var(--muted);">お知らせを出す日（この日より前は誰の画面にも出ません）</div>
+            <div style="display:flex;gap:6px;">
+              <input type="date" id="ygStartDate" value="2027-02-01" style="flex:1;font-size:16px;">
+              <button class="btn-px btn-ghost btn-sm" onclick="ygAdmin('schedule')">日付を変更</button>
+            </div>
+            <div id="ygAdminState" style="font-size:11px;color:var(--accent4);"></div>
+            <button class="btn-px btn-ghost btn-sm" onclick="ygAdmin('add', document.getElementById('adminMemberSelect').value)">選んだメンバーを寄せ書きの対象にする</button>
+            <div id="ygAdminList"></div>
             <button class="btn-px btn-red btn-sm" onclick="closeAdminPanel()">管理画面を閉じる</button>
           </div>
         </div>
@@ -446,6 +474,7 @@
     <button class="menu-item-btn" onclick="openMypage();closeMenu()" title="マイページ">👤</button>
     <button class="menu-item-btn" onclick="openFortune();closeMenu()" title="今日の運勢">🔮</button>
     <button class="menu-item-btn" onclick="openFlashGameSetup();closeMenu()" title="フラッシュ会計">🧮</button>
+    <button class="menu-item-btn menu-item-yg" id="menuYg" style="display:none" onclick="ygOpen();closeMenu()" title="寄せ書き">寄せ書き</button>
     <button class="menu-item-btn menu-item-text" onclick="yrOpen();closeMenu()" title="年間ランキング">🏆年間</button>
     <button class="menu-item-btn menu-item-vs" onclick="vsOpen();closeMenu()" title="フラッシュ対戦">対戦</button>
     <button class="menu-item-btn menu-item-text" onclick="openApplyMenu();closeMenu()" title="シフト申請">シフト申請</button>
@@ -566,6 +595,30 @@
     </div>
 
   </div>
+</div>
+
+<!-- 寄せ書きのお知らせ（募集開始日以降、書ける人にだけ1回出る） -->
+<div class="modal-overlay hidden" id="ygNotice" style="z-index:390;">
+  <div class="modal-sheet" style="border-top-color:var(--accent4);">
+    <div class="modal-header">
+      <span class="modal-title" style="color:var(--accent4);">おしらせ</span>
+      <button class="btn-px btn-ghost btn-sm" onclick="ygNoticeClose()">✕</button>
+    </div>
+    <div style="font-size:14px;line-height:1.8;">卒業する人たちに寄せ書きを送ります！本人たちには内緒です</div>
+    <div style="font-size:13px;line-height:1.8;">1人ずつメッセージを書いて「保存」を押してください（MENUから何度でも書き直せます）</div>
+    <div style="font-size:11px;color:var(--muted);line-height:1.8;">※本人の画面には出ないようになってます<br>※ログインしてないと出ないので、まだの人は先にPINを決めてね</div>
+    <button class="btn-px btn-primary" style="background:var(--accent4);" onclick="ygNoticeClose();ygOpenWrite()">書く ▶</button>
+    <button class="btn-px btn-ghost btn-sm" onclick="ygNoticeClose()">あとで</button>
+  </div>
+</div>
+
+<!-- 寄せ書き -->
+<div class="yg-overlay hidden" id="ygOverlay">
+  <div class="yg-header">
+    <span class="yg-title" id="ygTitle">寄せ書き</span>
+    <button class="btn-px btn-red btn-sm" onclick="ygClose()">EXIT</button>
+  </div>
+  <div class="yg-body" id="ygBody"></div>
 </div>
 
 <!-- 年間ランキング -->
@@ -2170,6 +2223,7 @@ function openAdminPanel(){
   sel.innerHTML = members.map(m => `<option value="${esc(m.name)}">${esc(m.name)}</option>`).join('');
   document.getElementById('adminLoginArea').style.display = 'none';
   document.getElementById('adminPanel').style.display = 'flex';
+  ygAdmin('list');
 }
 
 function closeAdminPanel(){
@@ -2827,6 +2881,152 @@ function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
 function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2500); }
 function setStatus(t){ document.getElementById('statusText').textContent=t; }
 
+// ===== 寄せ書き =====
+// 対象の本人には、管理者が「公開する」を押すまで存在そのものを見せない（サーバー側で出し分け）
+let yg = { targets: [], mine: null };
+let ygAdminTargets = [];
+
+async function ygRefresh(){
+  const btn = document.getElementById('menuYg');
+  if(!authMe){ yg = { targets: [], mine: null }; if(btn) btn.style.display = 'none'; return; }
+  try{
+    const d = await authApi('yg-list', {});
+    if(!d.ok) return;
+    yg = { targets: d.targets || [], mine: d.mine || null };
+    if(btn) btn.style.display = (yg.targets.length || yg.mine) ? '' : 'none';
+    ygMaybeNotify(d.startAt);
+    // 自分宛てが公開されたら、最初の1回だけ自動で開く
+    if(yg.mine){
+      const key = 'ygSeen_' + authMe.groupId + '_' + (yg.mine.releasedAt || '');
+      let seen = false;
+      try{ seen = !!localStorage.getItem(key); }catch(e){}
+      if(!seen){ try{ localStorage.setItem(key, '1'); }catch(e){} ygShowBoard(yg.mine.name, yg.mine.messages); }
+    }
+  }catch(e){}
+}
+
+function ygClose(){ document.getElementById('ygOverlay').classList.add('hidden'); }
+
+// 募集が始まったら、書ける人にお知らせを1回だけ出す（アプリを開いた時）
+function ygMaybeNotify(startAt){
+  if(!authMe || !yg.targets.length || !startAt) return;
+  const key = 'ygNotified_' + authMe.groupId + '_' + startAt;
+  try{ if(localStorage.getItem(key)) return; }catch(e){ return; }
+  setTimeout(()=>{
+    // 他の画面（アンケート・ログイン・寄せ書き本体）が出ている時は次回に回す
+    const busy = ['svOverlay','mypageModal','ygOverlay'].some(id => { const el = document.getElementById(id); return el && !el.classList.contains('hidden'); });
+    if(busy || !authMe) return;
+    try{ localStorage.setItem(key, '1'); }catch(e){}
+    document.getElementById('ygNotice').classList.remove('hidden');
+  }, 1200);
+}
+function ygNoticeClose(){ document.getElementById('ygNotice').classList.add('hidden'); }
+
+// 届いた寄せ書きを表示（1人ずつ枠で囲む）
+function ygShowBoard(name, messages){
+  document.getElementById('ygTitle').textContent = '寄せ書き';
+  const body = document.getElementById('ygBody');
+  body.innerHTML =
+    `<div class="yg-to">${esc(name)} さんへ<br><span style="font-size:12px;color:var(--muted);font-weight:normal;">みんなからメッセージが届いています</span></div>` +
+    (messages.length
+      ? messages.map(m => `<div class="yg-card"><div class="yg-text">${esc(m.text)}</div><div class="yg-from">— ${esc(m.from)}</div></div>`).join('')
+      : '<div class="yg-lead" style="text-align:center;">まだメッセージはありません</div>') +
+    ((yg.targets.length && authMe) ? '<button class="btn-px btn-ghost btn-sm" onclick="ygOpenWrite()">ほかの人に書く ▶</button>' : '');
+  document.getElementById('ygOverlay').classList.remove('hidden');
+  document.getElementById('ygOverlay').scrollTop = 0;
+}
+
+function ygOpen(){
+  if(yg.mine && !yg.targets.length){ ygShowBoard(yg.mine.name, yg.mine.messages); return; }
+  ygOpenWrite();
+}
+
+// 書く画面
+function ygOpenWrite(){
+  document.getElementById('ygTitle').textContent = '寄せ書きを書く';
+  const body = document.getElementById('ygBody');
+  body.innerHTML =
+    (yg.mine ? '<button class="btn-px btn-primary" style="background:var(--accent4);" onclick="ygShowBoard(yg.mine.name, yg.mine.messages)">自分宛ての寄せ書きを見る ▶</button>' : '') +
+    '<div class="yg-lead">卒業するメンバーへのメッセージを集めています。<br>本人にはまだ内緒です。この画面も本人には出ていません。<br>書き直すと上書きされます（1人につき1通・400文字まで）。</div>' +
+    yg.targets.map((t, i) => `
+      <div class="yg-card">
+        <div class="yg-name">${esc(t.name)} さんへ</div>
+        <textarea id="ygText${i}" maxlength="400" placeholder="メッセージを書く">${esc(t.myText)}</textarea>
+        <div class="yg-row">
+          <span id="ygState${i}">${t.myText ? '✓ 保存済み' : 'まだ書いていません'}</span>
+          <button class="btn-px btn-ghost btn-sm" onclick="ygSave(${i})">保存</button>
+        </div>
+      </div>`).join('');
+  document.getElementById('ygOverlay').classList.remove('hidden');
+  document.getElementById('ygOverlay').scrollTop = 0;
+}
+
+async function ygSave(i){
+  const t = yg.targets[i]; if(!t) return;
+  const text = document.getElementById('ygText' + i).value.trim();
+  const st = document.getElementById('ygState' + i);
+  st.textContent = '保存中...';
+  try{
+    const d = await authApi('yg-write', { target: t.name, text });
+    if(d.ok){
+      t.myText = text;
+      st.textContent = text ? '✓ 保存済み' : '取り消しました';
+      showToast(text ? `${t.name} さんへのメッセージを保存しました` : '取り消しました');
+    } else { st.textContent = '保存できませんでした'; showToast(d.error || '保存できませんでした'); }
+  }catch(e){ st.textContent = '保存できませんでした'; showToast('通信エラーです。もう一度お試しください'); }
+}
+
+// 公開リンク（?y=...）から開いた場合。ログインしていなくても読める
+async function ygOpenFromLink(token){
+  try{
+    const r = await fetch('/api/auth?action=yg-view&token=' + encodeURIComponent(token));
+    const d = await r.json();
+    if(d.ok) ygShowBoard(d.name, d.messages);
+    else showToast(d.error || '寄せ書きを開けませんでした');
+  }catch(e){ showToast('通信エラーです'); }
+}
+
+// 管理者：対象の追加・公開・取り消し
+async function ygAdmin(op, name){
+  if(!adminPassword) return;
+  if(op === 'remove' && !confirm(`${name} さんを対象から外しますか？\n集まったメッセージも消えます`)) return;
+  if(op === 'release' && !confirm(`${name} さんに寄せ書きを公開しますか？\n本人がアプリを開くと表示されます`)) return;
+  try{
+    const r = await fetch('/api/auth?action=yg-admin', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ adminPassword, groupId, op, name, date: document.getElementById('ygStartDate').value })
+    });
+    const d = await r.json();
+    if(d.error){ if(op !== 'list') showToast(d.error); return; }
+    ygAdminTargets = d.targets || [];
+    if(d.startAt) document.getElementById('ygStartDate').value = d.startAt;
+    document.getElementById('ygAdminState').textContent = !ygAdminTargets.length ? ''
+      : d.started ? '● 募集中（みんなの画面に出ています）'
+      : `○ ${d.startAt} から、みんなの画面にお知らせが出ます（今は誰にも出ていません）`;
+    if(op === 'schedule') showToast('お知らせを出す日を変更しました');
+    const box = document.getElementById('ygAdminList');
+    box.innerHTML = ygAdminTargets.length ? ygAdminTargets.map((t, i) => `
+      <div class="yg-admin-row">
+        <span style="flex:1;min-width:110px;">${esc(t.name)}　${t.count}通　${t.released ? '<span style="color:var(--accent3)">公開中</span>' : '<span style="color:var(--muted)">内緒</span>'}</span>
+        ${t.released
+          ? `<button class="btn-px btn-ghost btn-sm" onclick="ygAdminCopy(${i})">リンク</button><button class="btn-px btn-ghost btn-sm" onclick="ygAdmin('unrelease', ygAdminTargets[${i}].name)">内緒に戻す</button>`
+          : `<button class="btn-px btn-ghost btn-sm" onclick="ygAdmin('release', ygAdminTargets[${i}].name)">公開する</button>`}
+        <button class="btn-px btn-red btn-sm" onclick="ygAdmin('remove', ygAdminTargets[${i}].name)">外す</button>
+      </div>`).join('') : '<div style="font-size:11px;color:var(--muted);">まだ対象はいません</div>';
+    if(op === 'add') showToast(`${name} さんを寄せ書きの対象にしました`);
+    if(op === 'release') showToast(`${name} さんに公開しました`);
+    if(op !== 'list') ygRefresh();
+  }catch(e){ showToast('エラーが発生しました'); }
+}
+
+function ygAdminCopy(i){
+  const t = ygAdminTargets[i]; if(!t || !t.token) return;
+  const url = `${location.origin}/?y=${t.token}`;
+  const text = `${t.name}さんへ、みんなから寄せ書きが届いています！\n${url}`;
+  if(navigator.share) navigator.share({ title: '寄せ書き', text }).catch(()=>{});
+  else navigator.clipboard.writeText(text).then(()=>showToast('本人に送るリンクをコピーしました'));
+}
+
 // ===== 最初の画面：シフターのリンク＋PIN =====
 // 段階: 'link'（リンクとPINを入れた直後）→ 状況により
 //   'confirm'  … リンクは登録済み・PIN未設定 → 確認入力して登録
@@ -3065,6 +3265,7 @@ function authApply(d){
     const merged = Object.assign({}, p.memberColors || {}, local);
     localStorage.setItem(key, JSON.stringify(merged));
   }catch(e){}
+  ygRefresh();
 }
 
 function authLocalProfile(){
@@ -3085,6 +3286,11 @@ function authPushProfile(){
 
 // 起動時：引き継ぎリンク → ログイン復元 の順に試す
 async function authInit(){
+  // 0) 寄せ書きの公開リンク（?y=...）
+  let ygTok = null;
+  try{ ygTok = new URLSearchParams(location.search).get('y'); }catch(e){}
+  if(ygTok){ try{ history.replaceState(null, '', location.pathname); }catch(e){} ygOpenFromLink(ygTok); }
+
   // 1) 引き継ぎリンク（?h=コード）
   let code = null;
   try{ code = new URLSearchParams(location.search).get('h'); }catch(e){}
@@ -3114,7 +3320,7 @@ async function authInit(){
       else if(groupId) renderMembers();
     } else if(d._status === 401){
       // サーバーが「無効」とはっきり答えた時だけログアウト扱いにする
-      authMe = null; authSaveLocal();
+      authMe = null; authSaveLocal(); ygRefresh();
     }
     // それ以外（500や通信エラー）はログイン状態に触らない
   }catch(e){}
@@ -3296,6 +3502,7 @@ async function logoutMypage(){
   if(!confirm('ログアウトしますか？\n次に入るときはPINが必要になります')) return;
   try{ await authApi('logout', {}); }catch(e){}
   authMe = null; myData = null; authSaveLocal();
+  ygRefresh();
   closeMypage();
   renderMembers();
   showToast('ログアウトしました');
