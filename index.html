@@ -250,7 +250,8 @@
     .modal-overlay{position:fixed;inset:0;background:#00000088;z-index:200;display:flex;align-items:flex-end}
     .modal-overlay.hidden{display:none}
     .auth-input{background:#080814;border:2px solid var(--muted);color:var(--text);font-family:inherit;font-size:16px;padding:8px;width:100%;outline:none}
-    #authPin,#authPin2{letter-spacing:.4em}
+    #authPin,#authPin2,.gs-pin{letter-spacing:.4em}
+    .gs-pin::placeholder{letter-spacing:0}
     .modal-sheet{background:var(--bg);border-top:var(--px) solid var(--accent);width:100%;max-height:90vh;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px}
     .modal-header{display:flex;align-items:center;justify-content:space-between}
     .modal-title{font-family:'Press Start 2P',monospace;font-size:8px;color:var(--accent)}
@@ -302,19 +303,39 @@
     <div class="group-screen">
       <div class="screen-title">SHIFT<br>MATOMEREL</div>
 
-      <div class="px-card">
-        <div class="px-label">グループを作る</div>
-        <input type="text" id="newGroupId" placeholder="グループID（例: maverick2026）" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
-        <div style="font-size:11px;color:var(--muted);">英数字入力，任意のIDを入力してください</div>
-        <button class="btn-px btn-primary" onclick="createGroup()">START ▶</button>
+      <!-- ログイン済みで HOME に戻ってきた人用 -->
+      <div class="px-card" id="gsResume" style="display:none;">
+        <div class="px-label">WELCOME BACK</div>
+        <button class="btn-px btn-primary" onclick="gsResumeGo()" id="gsResumeBtn">つづける ▶</button>
       </div>
 
-      <div class="divider">CONTINUE</div>
+      <!-- シフターのリンク＋PIN（はじめての人も、戻ってきた人もここから） -->
+      <div class="px-card" id="gsLoginCard">
+        <div class="px-label">LOGIN / はじめての人も</div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.6;">自分のシフターのリンクを貼って、PINを入れてください。<br>はじめての人は、ここで好きなPINを決めます。</div>
+        <input type="url" id="gsLink" placeholder="シフターのリンク（https://m-s1.ciftr.jp/...）" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" oninput="gsReset()">
+        <input type="password" id="gsPin" class="gs-pin" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off" placeholder="PIN（数字4桁〜）">
+
+        <!-- 状況に応じて出る追加欄 -->
+        <div id="gsMsg" style="display:none;font-size:12px;color:var(--accent3);line-height:1.6;"></div>
+        <div id="gsGroupRow" style="display:none;flex-direction:column;gap:8px;">
+          <input type="text" id="gsGroup" placeholder="グループID" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" oninput="gsGroupChanged()">
+        </div>
+        <div id="gsNameRow" style="display:none;flex-direction:column;gap:8px;">
+          <select id="gsName" class="auth-input" onchange="gsNameChanged()"></select>
+          <input type="text" id="gsNewName" placeholder="名前（例: しふた）" autocomplete="off" style="display:none;">
+        </div>
+        <input type="password" id="gsPin2" class="gs-pin" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off" placeholder="確認のためPINをもう一度" style="display:none;">
+
+        <button class="btn-px btn-primary" id="gsBtn" onclick="gsNext()">NEXT ▶</button>
+      </div>
+
+      <div class="divider">OR</div>
 
       <div class="px-card">
-        <div class="px-label">グループに参加する</div>
+        <div class="px-label">ログインせずに見るだけ</div>
         <input type="text" id="joinGroupId" placeholder="グループID" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
-        <button class="btn-px btn-primary" onclick="joinGroup()">JOIN ▶</button>
+        <button class="btn-px btn-ghost" onclick="joinGroup()" style="width:100%;padding:10px;">見る ▶</button>
       </div>
     </div>
   </div>
@@ -824,6 +845,7 @@ function leaveGroup(){
   try{ localStorage.setItem('authLeftGroup','1'); }catch(e){}
   groupId=null; members=[];
   document.getElementById('groupScreen').style.display='block';
+  gsRefreshResume();
   document.getElementById('appScreen').style.display='none';
   document.getElementById('tabs').style.display='none';
   document.getElementById('fetchBtn').style.display='none';
@@ -2805,6 +2827,197 @@ function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
 function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2500); }
 function setStatus(t){ document.getElementById('statusText').textContent=t; }
 
+// ===== 最初の画面：シフターのリンク＋PIN =====
+// 段階: 'link'（リンクとPINを入れた直後）→ 状況により
+//   'confirm'  … リンクは登録済み・PIN未設定 → 確認入力して登録
+//   'group'    … リンクが未登録 → グループIDを聞く
+//   'name'     … グループの中の誰か（または新規参加）を選ぶ
+let gs = { step: 'link', hit: null, members: [], registered: [] };
+
+function gsShow(id, on, disp){ const el = document.getElementById(id); if(el) el.style.display = on ? (disp || 'block') : 'none'; }
+function gsMsg(t){ const el = document.getElementById('gsMsg'); el.textContent = t || ''; el.style.display = t ? 'block' : 'none'; }
+
+function gsReset(){
+  gs = { step: 'link', hit: null, members: [], registered: [] };
+  gsMsg('');
+  gsShow('gsGroupRow', false); gsShow('gsNameRow', false); gsShow('gsPin2', false);
+  document.getElementById('gsPin2').value = '';
+  document.getElementById('gsBtn').textContent = 'NEXT ▶';
+}
+
+function gsGroupChanged(){
+  if(gs.step === 'name'){ gs.step = 'group'; gsShow('gsNameRow', false); gsShow('gsPin2', false); gsMsg('グループIDを入れてください'); }
+}
+
+function gsNameChanged(){
+  const v = document.getElementById('gsName').value;
+  const isNew = v === '__new__';
+  gsShow('gsNewName', isNew);
+  const needConfirm = !!v && (isNew || !gs.registered.includes(v));
+  gsShow('gsPin2', needConfirm);
+  document.getElementById('gsBtn').textContent = needConfirm ? 'このPINで登録 ▶' : 'ログイン ▶';
+}
+
+function gsPinOk(needConfirm){
+  const pin = document.getElementById('gsPin').value.trim();
+  if(!/^\d{4,8}$/.test(pin)){ showToast('PINは数字4〜8桁です'); return null; }
+  if(needConfirm && pin !== document.getElementById('gsPin2').value.trim()){ showToast('確認用のPINが一致しません'); return null; }
+  return pin;
+}
+
+async function gsFinish(d, msg){
+  authApply(d);
+  authPushProfile();
+  document.getElementById('gsLink').value = '';
+  document.getElementById('gsPin').value = '';
+  gsReset();
+  showToast(msg);
+  await enterGroup(d.groupId);
+}
+
+async function gsNext(){
+  const btn = document.getElementById('gsBtn');
+  if(btn.disabled) return;
+  btn.disabled = true;
+  try{ await gsRun(); }
+  catch(e){ showToast('通信エラーです。もう一度お試しください'); }
+  btn.disabled = false;
+}
+
+async function gsRun(){
+  const url = document.getElementById('gsLink').value.trim();
+  if(!url){ showToast('シフターのリンクを貼ってください'); return; }
+  if(!url.includes('ciftr.jp')){ showToast('ciftr.jpのリンクを貼ってください'); return; }
+
+  // --- 1) リンクから本人を引く ---
+  if(gs.step === 'link'){
+    const pin = gsPinOk(false); if(!pin) return;
+    const hit = await authApi('link-lookup', { url });
+    if(hit.error){ showToast(hit.error); return; }
+    if(hit.found && hit.hasPin){
+      const d = await authApi('login', { groupId: hit.groupId, name: hit.name, pin });
+      if(d.ok) return gsFinish(d, `${d.name} さん、おかえりなさい`);
+      showToast(d.error || 'ログインできませんでした'); return;
+    }
+    if(hit.found){
+      gs.step = 'confirm'; gs.hit = hit;
+      gsMsg(`${hit.name} さんですね。はじめてのPIN設定なので、確認のためもう一度入れてください`);
+      gsShow('gsPin2', true);
+      document.getElementById('gsBtn').textContent = 'このPINで登録 ▶';
+      document.getElementById('gsPin2').focus();
+      return;
+    }
+    gs.step = 'group';
+    gsMsg('このリンクはまだ登録されていません。入りたいグループのIDを入れてください');
+    gsShow('gsGroupRow', true, 'flex');
+    const g = document.getElementById('gsGroup');
+    if(!g.value) g.focus();
+    else return gsRun();   // 招待リンクでグループIDが入っていればそのまま次へ
+    return;
+  }
+
+  // --- 2) リンク登録済み・PIN未設定 → 登録 ---
+  if(gs.step === 'confirm'){
+    const pin = gsPinOk(true); if(!pin) return;
+    const d = await authApi('register', { groupId: gs.hit.groupId, name: gs.hit.name, pin, profile: authLocalProfile() });
+    if(d.ok) return gsFinish(d, '登録しました。次からは自動でログインします');
+    showToast(d.error || '登録できませんでした'); return;
+  }
+
+  // --- 3) グループIDを受け取り、メンバーを読む ---
+  if(gs.step === 'group'){
+    const gid = document.getElementById('gsGroup').value.trim();
+    if(!gid){ showToast('グループIDを入れてください'); return; }
+    if(!/^[a-zA-Z0-9_-]+$/.test(gid)){ showToast('英数字・ハイフン・アンダーバーのみ使えます'); return; }
+    const r = await fetch(`/api/groups?groupId=${encodeURIComponent(gid)}`);
+    const d = await r.json();
+    gs.members = d.members || [];
+    const st = await authApi('status&groupId=' + encodeURIComponent(gid));
+    gs.registered = st.registered || [];
+    gs.step = 'name';
+    const sel = document.getElementById('gsName');
+    sel.innerHTML = '<option value="">— 自分の名前を選ぶ —</option>' +
+      '<option value="__new__">＋ 新しく参加する</option>' +
+      gs.members.map(m => `<option value="${esc(m.name)}">${esc(m.name)}</option>`).join('');
+    if(!gs.members.length) sel.value = '__new__';
+    // 貼ったリンクが既にこのグループの誰かのものなら、その人を選んだ状態にする
+    const sOf = (u) => (String(u).match(/[?&]s=([A-Za-z0-9]+)/) || [])[1] || String(u).replace(/^https?:\/\/[^\/]+/, '');
+    const same = gs.members.find(m => sOf(m.url) === sOf(url));
+    if(same) sel.value = same.name;
+    gsShow('gsNameRow', true, 'flex');
+    gsMsg(same ? `${same.name} さんですね。このまま進んでください`
+      : gs.members.length
+      ? '新しく参加する人は「＋ 新しく参加する」を、前から居てリンクが変わった人は自分の名前を選んでください'
+      : 'このグループはまだ誰もいません。最初のメンバーとして名前を決めてください');
+    gsNameChanged();
+    return;
+  }
+
+  // --- 4) 名前が決まった → 参加 or リンク差し替え ---
+  if(gs.step === 'name'){
+    const gid = document.getElementById('gsGroup').value.trim();
+    const v = document.getElementById('gsName').value;
+    if(!v){ showToast('名前を選んでください'); return; }
+
+    if(v === '__new__'){
+      const name = document.getElementById('gsNewName').value.trim();
+      if(!name){ showToast('名前を入れてください'); return; }
+      const pin = gsPinOk(true); if(!pin) return;
+      const ar = await fetch(`/api/groups?groupId=${encodeURIComponent(gid)}&action=add`, {
+        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name, url })
+      });
+      const ad = await ar.json();
+      if(ad.error){ showToast(ad.error === 'already exists' ? 'このリンクは登録済みです' : ad.error); return; }
+      const d = await authApi('register', { groupId: gid, name, pin, profile: authLocalProfile() });
+      if(d.ok) return gsFinish(d, `${name} さん、ようこそ`);
+      showToast(d.error || '登録できませんでした'); return;
+    }
+
+    // 既存メンバー：PINで本人確認してから、リンクを新しいものに差し替える
+    const isNew = !gs.registered.includes(v);
+    const pin = gsPinOk(isNew); if(!pin) return;
+    const d = isNew
+      ? await authApi('register', { groupId: gid, name: v, pin, profile: authLocalProfile() })
+      : await authApi('login', { groupId: gid, name: v, pin });
+    if(!d.ok){ showToast(d.error || 'ログインできませんでした'); return; }
+    const old = gs.members.find(m => m.name === v);
+    if(old && old.url !== url){
+      try{
+        const ur = await fetch(`/api/groups?groupId=${encodeURIComponent(gid)}&action=updateUrl`, {
+          method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ oldUrl: old.url, newUrl: url })
+        });
+        const ud = await ur.json();
+        if(!ud.error){
+          d.url = url;
+          try{
+            const mc = JSON.parse(localStorage.getItem('memberColors_' + gid) || '{}');
+            if(mc[old.url] !== undefined){ mc[url] = mc[old.url]; delete mc[old.url]; localStorage.setItem('memberColors_' + gid, JSON.stringify(mc)); }
+          }catch(e){}
+        }
+      }catch(e){}
+    }
+    return gsFinish(d, `${v} さん、リンクを更新してログインしました`);
+  }
+}
+
+// HOMEに戻ってきたログイン済みの人向け
+function gsRefreshResume(){
+  const card = document.getElementById('gsResume');
+  if(!card) return;
+  card.style.display = authMe ? 'flex' : 'none';
+  if(authMe) document.getElementById('gsResumeBtn').textContent = `${authMe.name} としてつづける ▶`;
+}
+function gsResumeGo(){ if(authMe) enterGroup(authMe.groupId); }
+
+// 招待リンク（?g=グループID）で来た人はグループIDを入力済みにする
+function gsPrefillFromUrl(){
+  let g = null;
+  try{ g = new URLSearchParams(location.search).get('g'); }catch(e){}
+  if(!g || !/^[a-zA-Z0-9_-]+$/.test(g)) return;
+  const a = document.getElementById('gsGroup'), b = document.getElementById('joinGroupId');
+  if(a) a.value = g; if(b) b.value = g;
+}
+
 // ===== 個人アカウント（名前＋PIN・ログインしっぱなし） =====
 // ログイン状態は「サーバー発行のCookie」と「localStorage」の両方に持つ。
 // 片方が消えても、起動時の /api/auth?action=me でもう片方から復元する。
@@ -2816,6 +3029,7 @@ let myData = null;          // 旧マイページ互換（ランキング表示�
 try{ authMe = JSON.parse(localStorage.getItem('authMe') || 'null'); }catch(e){ authMe = null; }
 
 function authSaveLocal(){
+  try{ gsRefreshResume(); }catch(e){}
   try{
     if(authMe) localStorage.setItem('authMe', JSON.stringify(authMe));
     else localStorage.removeItem('authMe');
@@ -2978,7 +3192,8 @@ async function authSubmit(){
     if(d.ok){
       authApply(d);
       authPushProfile();
-      showMypageMain();
+      closeMypage();              // 設定・ログインが済んだらシフト画面へ戻る
+      document.querySelectorAll('.tab')[0].click();
       renderMembers();
       showToast(isNew ? '登録しました。次からは自動でログインします' : 'ログインしました');
     } else if(d._status === 409 || d.needRegister){
@@ -3098,6 +3313,8 @@ document.querySelectorAll('.tab').forEach(tab=>{
 
 // 起動
 const savedId=localStorage.getItem('shiftGroupId');
+gsPrefillFromUrl();
+gsRefreshResume();
 (async ()=>{
   if(savedId) await enterGroup(savedId);
   authInit();
