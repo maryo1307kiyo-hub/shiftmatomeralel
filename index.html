@@ -249,6 +249,8 @@
     .flash-result-wrong{font-family:'Press Start 2P',monospace;font-size:14px;color:var(--accent2);}
     .modal-overlay{position:fixed;inset:0;background:#00000088;z-index:200;display:flex;align-items:flex-end}
     .modal-overlay.hidden{display:none}
+    .auth-input{background:#080814;border:2px solid var(--muted);color:var(--text);font-family:inherit;font-size:16px;padding:8px;width:100%;outline:none}
+    #authPin,#authPin2{letter-spacing:.4em}
     .modal-sheet{background:var(--bg);border-top:var(--px) solid var(--accent);width:100%;max-height:90vh;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px}
     .modal-header{display:flex;align-items:center;justify-content:space-between}
     .modal-title{font-family:'Press Start 2P',monospace;font-size:8px;color:var(--accent)}
@@ -385,6 +387,7 @@
             <select id="adminMemberSelect" style="background:#080814;border:2px solid var(--muted);color:var(--text);font-family:inherit;font-size:14px;padding:8px;width:100%;outline:none;"></select>
             <div style="font-size:11px;color:var(--muted);">リセットすると次回そのメンバーは再設定が必要になります</div>
             <button class="btn-px btn-primary" style="background:var(--accent2);" onclick="adminResetPassword()">パスワードをリセット</button>
+            <button class="btn-px btn-primary" style="background:var(--accent2);" onclick="adminResetPin()">ログインPINをリセット</button>
             <button class="btn-px btn-red btn-sm" onclick="closeAdminPanel()">管理画面を閉じる</button>
           </div>
         </div>
@@ -724,25 +727,18 @@
       <button class="btn-px btn-ghost btn-sm" onclick="closeMypage()">✕</button>
     </div>
 
-    <!-- 未ログイン画面 -->
+    <!-- 未ログイン画面（名前＋PIN） -->
     <div id="mypageLogin">
-      <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">マイIDでログインすると給料計算などができます</div>
-      <div style="display:flex;flex-direction:column;gap:8px;">
-        <div style="font-size:11px;color:var(--muted);">マイID（英数字6文字以上）</div>
-        <input type="text" id="myUserId" placeholder="例: matomereltarou1234" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
-        <button class="btn-px btn-primary" onclick="loginMypage()">ログイン / 新規登録</button>
-      </div>
-    </div>
-
-    <!-- 新規登録画面 -->
-    <div id="mypageRegister" style="display:none">
-      <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">初回登録：グループIDとニックネームを紐づけます</div>
-      <div style="display:flex;flex-direction:column;gap:8px;">
-        <div style="font-size:11px;color:var(--muted);">グループID</div>
-        <input type="text" id="regGroupId" placeholder="グループID" autocomplete="off" autocorrect="off" autocapitalize="off">
-        <div style="font-size:11px;color:var(--muted);">ニックネーム（グループに登録済みのもの）</div>
-        <input type="text" id="regNickname" placeholder="例: しふた" autocomplete="off">
-        <button class="btn-px btn-primary" onclick="registerMypage()">登録する</button>
+      <div id="authNoGroup" style="font-size:12px;color:var(--muted);display:none;">先にグループに入ってから開いてください</div>
+      <div id="authForm" style="display:flex;flex-direction:column;gap:8px;">
+        <div style="font-size:12px;color:var(--muted);" id="authLead">自分の名前を選んでPINを入れると、この端末はずっとログインしたままになります</div>
+        <div style="font-size:11px;color:var(--muted);">名前</div>
+        <select id="authName" class="auth-input" onchange="authNameChanged()"></select>
+        <div style="font-size:11px;color:var(--muted);" id="authPinLabel">PIN（数字4桁〜）</div>
+        <input type="password" id="authPin" class="auth-input" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off" placeholder="••••">
+        <input type="password" id="authPin2" class="auth-input" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off" placeholder="確認のためもう一度" style="display:none;">
+        <button class="btn-px btn-primary" id="authSubmitBtn" onclick="authSubmit()">ログイン</button>
+        <div style="font-size:11px;color:var(--muted);line-height:1.6;">PINを忘れたときは管理者に伝えるとリセットできます</div>
       </div>
     </div>
 
@@ -757,6 +753,21 @@
       <div class="px-card" style="margin-bottom:10px;">
         <div class="px-label">TODAY</div>
         <div class="stat-row"><span class="stat-label">🦁 LION RUN 本日順位</span><span class="stat-value" id="myRankDisplay">-</span></div>
+      </div>
+
+      <div class="px-card" style="margin-bottom:10px;">
+        <div class="px-label">ACCOUNT</div>
+        <div class="stat-row"><span class="stat-label">シフターURL</span><span class="stat-value" id="myUrlDisplay" style="font-size:10px;">-</span></div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px;">
+          <button class="btn-px btn-ghost btn-sm" onclick="authEditMyUrl()">🔗 自分のシフターURLを差し替える</button>
+          <button class="btn-px btn-ghost btn-sm" onclick="authHandoff()">📱 別の端末に引き継ぐ</button>
+          <button class="btn-px btn-ghost btn-sm" onclick="authChangePin()">🔑 PINを変える</button>
+        </div>
+        <div id="authHandoffBox" style="display:none;margin-top:12px;text-align:center;">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.6;">新しい端末でこのQRを読むとPINなしで入れます<br>（10分間・1回だけ有効）</div>
+          <div id="authQr" style="display:inline-block;background:#fff;padding:8px;"></div>
+          <div style="margin-top:8px;"><button class="btn-px btn-ghost btn-sm" onclick="authShareHandoff()">リンクを送る / コピー</button></div>
+        </div>
       </div>
 
       <button class="btn-px btn-red" onclick="logoutMypage()" style="width:100%;margin-top:8px;">ログアウト</button>
@@ -792,6 +803,7 @@ function joinGroup(){
 async function enterGroup(id){
   groupId=id;
   localStorage.setItem('shiftGroupId',id);
+  try{ localStorage.removeItem('authLeftGroup'); }catch(e){}
   document.getElementById('groupScreen').style.display='none';
   document.getElementById('appScreen').style.display='block';
   document.getElementById('tabs').style.display='flex';
@@ -809,6 +821,7 @@ async function enterGroup(id){
 
 function leaveGroup(){
   localStorage.removeItem('shiftGroupId');
+  try{ localStorage.setItem('authLeftGroup','1'); }catch(e){}
   groupId=null; members=[];
   document.getElementById('groupScreen').style.display='block';
   document.getElementById('appScreen').style.display='none';
@@ -1602,6 +1615,7 @@ async function editNickname(url, currentName){
     const d=await r.json();
     if(d.error){ showToast(d.error); return; }
     members=d.members;
+    if(authMe && authMe.groupId === groupId && authMe.name === currentName){ authMe.name = newName; authSaveLocal(); }
     renderMembers();
     showToast(`${currentName} → ${newName} に変更しました`);
   }catch(e){ showToast('変更に失敗しました'); }
@@ -1634,6 +1648,7 @@ async function editUrl(oldUrl, name){
 
     members = d.members;
     renderMembers();
+    if(authMe && authMe.name === name){ authMe.url = newUrl; authSaveLocal(); authPushProfile(); }
     showToast(`${name} のURLを更新しました`);
   }catch(e){ showToast('更新に失敗しました'); }
 }
@@ -1673,6 +1688,7 @@ function setMemberColor(url, color){
   const memberColors = JSON.parse(localStorage.getItem('memberColors_'+groupId)||'{}');
   memberColors[url] = color;
   localStorage.setItem('memberColors_'+groupId, JSON.stringify(memberColors));
+  authPushProfile();
   document.getElementById('colorPickerOverlay').remove();
   renderMembers();
   showToast('カラーを変更しました');
@@ -2013,6 +2029,14 @@ async function openApply(url, name) {
     return;
   }
 
+  // ログイン済みの本人なら、申請用パスワードの設定は不要（アカウントが本人確認を兼ねる）
+  if (authMe && authMe.groupId === groupId && authMe.name === name) {
+    closeApply();
+    window.open(applyTarget, '_blank');
+    if (!sParam) showToast('ページ内の「まとめて申請」から申請してください');
+    return;
+  }
+
   // サーバー側でリセットされてないか確認
   try {
     const r = await fetch(`/api/admin-shift?action=check-reset&groupId=${encodeURIComponent(groupId)}&name=${encodeURIComponent(name)}`);
@@ -2035,6 +2059,8 @@ async function openApply(url, name) {
 }
 
 function getMyApplyName() {
+  // ログイン済みならアカウントの名前が最優先
+  if (authMe && authMe.groupId === groupId) return authMe.name;
   // このスマホで設定済みの名前を探す
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
@@ -2145,6 +2171,20 @@ async function adminResetPassword(){
   }catch(e){ showToast('エラーが発生しました'); }
 }
 
+
+async function adminResetPin(){
+  const name = document.getElementById('adminMemberSelect').value;
+  if(!name){ showToast('メンバーを選択してください'); return; }
+  try{
+    const r = await fetch('/api/auth?action=admin-reset', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ adminPassword, groupId, name })
+    });
+    const d = await r.json();
+    if(d.error){ showToast(d.error); return; }
+    showToast(`${name} のログインPINをリセットしました`);
+  }catch(e){ showToast('エラーが発生しました'); }
+}
 
 // ===== フラッシュ会計 オンライン対戦 =====
 let vs = {
@@ -2765,18 +2805,193 @@ function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
 function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2500); }
 function setStatus(t){ document.getElementById('statusText').textContent=t; }
 
-// ===== マイページ =====
-let myData = null;
+// ===== 個人アカウント（名前＋PIN・ログインしっぱなし） =====
+// ログイン状態は「サーバー発行のCookie」と「localStorage」の両方に持つ。
+// 片方が消えても、起動時の /api/auth?action=me でもう片方から復元する。
+let authMe = null;          // { token, groupId, name, url, profile }
+let authRegistered = [];    // このグループでPIN設定済みの名前
+let authHandoffUrl = null;
+let myData = null;          // 旧マイページ互換（ランキング表示用）
+
+try{ authMe = JSON.parse(localStorage.getItem('authMe') || 'null'); }catch(e){ authMe = null; }
+
+function authSaveLocal(){
+  try{
+    if(authMe) localStorage.setItem('authMe', JSON.stringify(authMe));
+    else localStorage.removeItem('authMe');
+  }catch(e){}
+}
+
+async function authApi(action, body, method){
+  const headers = {};
+  if(body) headers['Content-Type'] = 'application/json';
+  if(authMe && authMe.token) headers['Authorization'] = 'Bearer ' + authMe.token;
+  const r = await fetch('/api/auth?action=' + action, {
+    method: method || (body ? 'POST' : 'GET'),
+    headers, credentials: 'same-origin',
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  let d = {};
+  try{ d = await r.json(); }catch(e){}
+  d._status = r.status;
+  return d;
+}
+
+// ログイン成立時の共通処理：保存 → 端末側の設定をアカウントと揃える
+function authApply(d){
+  authMe = { token: d.token, groupId: d.groupId, name: d.name, url: d.url, profile: d.profile || {} };
+  authSaveLocal();
+  const p = authMe.profile;
+  try{
+    // アンケートの回答者IDを揃える（別端末で同じ日を二重回答しないため）
+    if(p.surveyUid) localStorage.setItem('survey_uid', p.surveyUid);
+    // カラー設定：アカウント側を土台に、この端末で付けた色を上書き
+    const key = 'memberColors_' + authMe.groupId;
+    const local = JSON.parse(localStorage.getItem(key) || '{}');
+    const merged = Object.assign({}, p.memberColors || {}, local);
+    localStorage.setItem(key, JSON.stringify(merged));
+  }catch(e){}
+}
+
+function authLocalProfile(){
+  const out = {};
+  try{
+    out.surveyUid = svUid();
+    out.memberColors = JSON.parse(localStorage.getItem('memberColors_' + (authMe ? authMe.groupId : groupId)) || '{}');
+  }catch(e){}
+  return out;
+}
+
+let authPushTimer = null;
+function authPushProfile(){
+  if(!authMe) return;
+  clearTimeout(authPushTimer);
+  authPushTimer = setTimeout(()=>{ authApi('profile', { profile: authLocalProfile() }).catch(()=>{}); }, 1500);
+}
+
+// 起動時：引き継ぎリンク → ログイン復元 の順に試す
+async function authInit(){
+  // 1) 引き継ぎリンク（?h=コード）
+  let code = null;
+  try{ code = new URLSearchParams(location.search).get('h'); }catch(e){}
+  if(code){
+    try{ history.replaceState(null, '', location.pathname); }catch(e){}
+    try{
+      const d = await authApi('handoff-use', { code });
+      if(d.ok){
+        authApply(d);
+        showToast(`${d.name} さんとしてログインしました`);
+        if(groupId !== d.groupId) enterGroup(d.groupId); else renderMembers();
+        return;
+      }
+      showToast(d.error || '引き継ぎに失敗しました');
+    }catch(e){ showToast('引き継ぎに失敗しました（通信エラー）'); }
+  }
+
+  // 2) ログイン復元（Cookie か localStorage のどちらかが残っていれば戻る）
+  try{
+    const d = await authApi('me');
+    if(d.ok){
+      authApply(d);
+      // グループ情報だけ消えていた場合は自動で戻す（自分で「退出」した場合は戻さない）
+      let left = false;
+      try{ left = !!localStorage.getItem('authLeftGroup'); }catch(e){}
+      if(!groupId && !left) enterGroup(d.groupId);
+      else if(groupId) renderMembers();
+    } else if(d._status === 401){
+      // サーバーが「無効」とはっきり答えた時だけログアウト扱いにする
+      authMe = null; authSaveLocal();
+    }
+    // それ以外（500や通信エラー）はログイン状態に触らない
+  }catch(e){}
+
+  authMaybePrompt();
+}
+
+// 初回だけ：PIN未設定の人にマイページを1回だけ開いて案内する
+function authMaybePrompt(){
+  if(authMe || !groupId || !members.length) return;
+  try{ if(localStorage.getItem('authPrompted_' + groupId)) return; }catch(e){ return; }
+  setTimeout(()=>{
+    if(authMe || !groupId) return;
+    const sv = document.getElementById('svOverlay');
+    if(sv && !sv.classList.contains('hidden')) return;   // アンケート表示中は次回に回す
+    try{ localStorage.setItem('authPrompted_' + groupId, '1'); }catch(e){}
+    openMypage();
+  }, 2500);
+}
 
 function openMypage(){
   document.getElementById('mypageModal').classList.remove('hidden');
-  const savedId = localStorage.getItem('myUserId');
-  if(savedId && myData){
-    showMypageMain();
-  } else if(savedId){
-    document.getElementById('myUserId').value = savedId;
-    loginMypage();
-  }
+  document.getElementById('authHandoffBox').style.display = 'none';
+  if(authMe){ showMypageMain(); return; }
+  showMypageLogin();
+}
+
+async function showMypageLogin(){
+  document.getElementById('mypageMain').style.display = 'none';
+  document.getElementById('mypageLogin').style.display = 'block';
+  document.getElementById('mypageTitle').textContent = 'LOGIN';
+  const hasGroup = !!groupId && members.length > 0;
+  document.getElementById('authNoGroup').style.display = hasGroup ? 'none' : 'block';
+  document.getElementById('authForm').style.display = hasGroup ? 'flex' : 'none';
+  if(!hasGroup) return;
+
+  const guess = getMyApplyName() || localStorage.getItem('vsName') || '';
+  const sel = document.getElementById('authName');
+  sel.innerHTML = '<option value="">— 選んでください —</option>' +
+    members.map(m => `<option value="${esc(m.name)}"${m.name === guess ? ' selected' : ''}>${esc(m.name)}</option>`).join('');
+  document.getElementById('authPin').value = '';
+  document.getElementById('authPin2').value = '';
+  authNameChanged();
+  try{
+    const d = await authApi('status&groupId=' + encodeURIComponent(groupId));
+    authRegistered = d.registered || [];
+    authNameChanged();
+  }catch(e){}
+}
+
+// 選んだ名前がPIN設定済みかどうかで「ログイン」と「初回設定」を出し分ける
+function authNameChanged(){
+  const name = document.getElementById('authName').value;
+  const isNew = !!name && !authRegistered.includes(name);
+  document.getElementById('authPin2').style.display = isNew ? 'block' : 'none';
+  document.getElementById('authPinLabel').textContent = isNew ? '好きなPINを決めてください（数字4桁〜）' : 'PIN';
+  document.getElementById('authSubmitBtn').textContent = isNew ? 'このPINで登録する' : 'ログイン';
+}
+
+async function authSubmit(){
+  const name = document.getElementById('authName').value;
+  const pin = document.getElementById('authPin').value.trim();
+  const pin2 = document.getElementById('authPin2').value.trim();
+  if(!name){ showToast('名前を選んでください'); return; }
+  if(!/^\d{4,8}$/.test(pin)){ showToast('PINは数字4〜8桁です'); return; }
+  const isNew = !authRegistered.includes(name);
+  if(isNew && pin !== pin2){ showToast('確認用のPINが一致しません'); return; }
+
+  const btn = document.getElementById('authSubmitBtn');
+  btn.disabled = true;
+  try{
+    const d = isNew
+      ? await authApi('register', { groupId, name, pin, profile: authLocalProfile() })
+      : await authApi('login', { groupId, name, pin });
+    if(d.ok){
+      authApply(d);
+      authPushProfile();
+      showMypageMain();
+      renderMembers();
+      showToast(isNew ? '登録しました。次からは自動でログインします' : 'ログインしました');
+    } else if(d._status === 409 || d.needRegister){
+      // 表示が古かった場合：一覧を取り直して出し分けをやり直す
+      showToast(d.error || 'もう一度お試しください');
+      const st = await authApi('status&groupId=' + encodeURIComponent(groupId));
+      authRegistered = st.registered || [];
+      authNameChanged();
+    } else {
+      showToast(d.error || 'ログインできませんでした');
+    }
+  }catch(e){ showToast('通信エラーです。もう一度お試しください'); }
+  btn.disabled = false;
 }
 
 function closeMypage(){
@@ -2787,66 +3002,88 @@ function closeMypageModal(e){
   if(e.target.id==='mypageModal') closeMypage();
 }
 
-async function loginMypage(){
-  const userId = document.getElementById('myUserId').value.trim();
-  if(!userId){ showToast('IDを入力してください'); return; }
-  if(!/^[a-zA-Z0-9_-]{6,}$/.test(userId)){
-    showToast('英数字6文字以上で入力してください'); return;
-  }
-  try{
-    const r = await fetch(`/api/mypage?userId=${encodeURIComponent(userId)}`);
-    if(r.status===404){
-      // 新規登録へ
-      localStorage.setItem('myUserId', userId);
-      document.getElementById('mypageLogin').style.display='none';
-      document.getElementById('mypageRegister').style.display='block';
-      if(groupId) document.getElementById('regGroupId').value = groupId;
-      return;
-    }
-    const d = await r.json();
-    myData = d;
-    localStorage.setItem('myUserId', userId);
-    showMypageMain();
-  }catch(e){ showToast('エラーが発生しました'); }
-}
-
-async function registerMypage(){
-  const userId = localStorage.getItem('myUserId');
-  const groupId2 = document.getElementById('regGroupId').value.trim();
-  const nickname = document.getElementById('regNickname').value.trim();
-  if(!groupId2||!nickname){ showToast('グループIDとニックネームは必須です'); return; }
-  try{
-    const r = await fetch('/api/mypage?action=register',{
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({userId,nickname,groupId:groupId2})
-    });
-    const d = await r.json();
-    if(d.error){ showToast(d.error); return; }
-    myData = d;
-    showMypageMain();
-  }catch(e){ showToast('登録に失敗しました'); }
-}
-
 function showMypageMain(){
   document.getElementById('mypageLogin').style.display='none';
-  document.getElementById('mypageRegister').style.display='none';
   document.getElementById('mypageMain').style.display='block';
   document.getElementById('mypageTitle').textContent='MY PAGE';
 
-  const nameEl = document.getElementById('myNicknameDisplay');
-  nameEl.textContent = myData.nickname;
-  document.getElementById('myGroupDisplay').textContent = 'グループ: '+myData.groupId;
+  let gp = null;
+  try{ gp = JSON.parse(localStorage.getItem('gameProfile') || 'null'); }catch(e){}
+  myData = { nickname: authMe.name, groupId: authMe.groupId, userId: gp ? gp.userId : null };
+
+  document.getElementById('myNicknameDisplay').textContent = authMe.name;
+  document.getElementById('myGroupDisplay').textContent = 'グループ: ' + authMe.groupId;
+  const me = members.find(m => m.name === authMe.name);
+  const url = me ? me.url : authMe.url;
+  document.getElementById('myUrlDisplay').textContent = url ? maskCiftrUrl(url).replace(/^https?:\/\//,'') : '未登録';
 
   loadMyRank();
 }
 
-function logoutMypage(){
-  localStorage.removeItem('myUserId');
-  myData = null;
-  document.getElementById('mypageMain').style.display='none';
-  document.getElementById('mypageLogin').style.display='block';
-  document.getElementById('myUserId').value='';
+function authEditMyUrl(){
+  const me = members.find(m => m.name === authMe.name);
+  if(!me){ showToast('メンバー一覧に自分の名前が見つかりません'); return; }
+  editUrl(me.url, me.name).then(()=>{ if(authMe) showMypageMain(); });
+}
+
+async function authChangePin(){
+  const oldPin = prompt('今のPINを入力してください');
+  if(!oldPin) return;
+  const newPin = prompt('新しいPIN（数字4〜8桁）');
+  if(!newPin) return;
+  if(!/^\d{4,8}$/.test(newPin)){ showToast('PINは数字4〜8桁です'); return; }
+  try{
+    const d = await authApi('change-pin', { oldPin, newPin });
+    if(d.ok){ authApply(d); showToast('PINを変更しました（他の端末はログアウトされます）'); }
+    else showToast(d.error || '変更できませんでした');
+  }catch(e){ showToast('通信エラーです'); }
+}
+
+// 引き継ぎ：10分・1回限りのリンクを出す（QR＋共有）
+async function authHandoff(){
+  try{
+    const d = await authApi('handoff-create', {});
+    if(!d.ok){ showToast(d.error || '発行できませんでした'); return; }
+    authHandoffUrl = `${location.origin}/?h=${d.code}`;
+    document.getElementById('authHandoffBox').style.display = 'block';
+    const box = document.getElementById('authQr');
+    box.innerHTML = '';
+    try{
+      await authLoadQrLib();
+      new QRCode(box, { text: authHandoffUrl, width: 180, height: 180, correctLevel: QRCode.CorrectLevel.M });
+    }catch(e){
+      box.innerHTML = '<div style="color:#333;font-size:11px;padding:8px;">QRを表示できませんでした。<br>下のボタンからリンクを送ってください</div>';
+    }
+  }catch(e){ showToast('通信エラーです'); }
+}
+
+function authLoadQrLib(){
+  if(window.QRCode) return Promise.resolve();
+  return new Promise((ok, ng)=>{
+    const sc = document.createElement('script');
+    sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+    sc.onload = ok; sc.onerror = ng;
+    document.head.appendChild(sc);
+  });
+}
+
+function authShareHandoff(){
+  if(!authHandoffUrl) return;
+  if(navigator.share){
+    navigator.share({ title: 'しふとまとめれ～る 引き継ぎ', url: authHandoffUrl }).catch(()=>{});
+  } else {
+    navigator.clipboard.writeText(authHandoffUrl).then(()=>showToast('引き継ぎリンクをコピーしました'));
+  }
+}
+
+// ログアウトは「自分で押したとき」だけ
+async function logoutMypage(){
+  if(!confirm('ログアウトしますか？\n次に入るときはPINが必要になります')) return;
+  try{ await authApi('logout', {}); }catch(e){}
+  authMe = null; myData = null; authSaveLocal();
   closeMypage();
+  renderMembers();
+  showToast('ログアウトしました');
 }
 
 // ===== タブ =====
@@ -2861,7 +3098,10 @@ document.querySelectorAll('.tab').forEach(tab=>{
 
 // 起動
 const savedId=localStorage.getItem('shiftGroupId');
-if(savedId) enterGroup(savedId);
+(async ()=>{
+  if(savedId) await enterGroup(savedId);
+  authInit();
+})();
 
 // アプリに戻ってきた時（ホーム画面から再表示など）も最新を確認
 document.addEventListener('visibilitychange', ()=>{
