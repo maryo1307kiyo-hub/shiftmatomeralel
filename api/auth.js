@@ -7,6 +7,9 @@
 //   session:{token}      … { groupId, accountId, ver, ref }   （1年で自動失効・開くたびに延長）
 //   handoff:{code}       … { groupId, accountId }             （10分・1回限り）
 //   url-index:{リンクID}  … { groupId, name }  （api/groups.js が書く。リンク＋PINログイン用）
+//   yg:{groupId}         … 寄せ書きの設定 { targets: { [名前]: { released, releasedAt, token } } }
+//   yg-msgs:{groupId}:{名前のハッシュ} … Redisハッシュ。フィールド=書いた人のaccountId、値={from,text,at}
+//   yg-token:{token}     … { groupId, name }（公開後に本人へ送るリンク用）
 //   auth-fail:{groupId}:{accountId} … { n }                   （PIN間違いの回数・10分で消える）
 
 import crypto from 'node:crypto';
@@ -92,6 +95,31 @@ export default async function handler(req, res) {
     return m ? 'p:' + m[1].replace(/\/+$/, '').toLowerCase() : null;
   }
 
+  async function redisCmd(cmd) {
+    const r = await fetch(UPSTASH_URL, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(cmd)
+    });
+    return (await r.json()).result;
+  }
+
+  // ---- 寄せ書き ----
+  const ygKey = (g) => `yg:${g}`;
+  const ygMsgKey = (g, name) => `yg-msgs:${g}:${nameHash(name)}`;
+  const ygConfig = async (g) => (await redisGet(ygKey(g))) || { targets: {} };
+  // 募集開始日（日本時間の YYYY-MM-DD）。未設定ならすぐ開始。開始前は書く側にも一切出さない
+  const todayJst = () => new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+  const ygStarted = (cfg) => !cfg.startAt || todayJst() >= cfg.startAt;
+  async function ygMessages(g, name) {
+    const flat = (await redisCmd(['HGETALL', ygMsgKey(g, name)])) || [];
+    const out = [];
+    for (let i = 0; i + 1 < flat.length; i += 2) {
+      try { out.push({ by: flat[i], ...JSON.parse(flat[i + 1]) }); } catch (e) {}
+    }
+    return out.sort((x, y) => String(x.at).localeCompare(String(y.at)));
+  }
+
   const nameHash = (name) => crypto.createHash('sha1').update(String(name)).digest('hex').slice(0, 20);
   const accKey = (g, id) => `account:${g}:${id}`;
   const nameKey = (g, name) => `account-name:${g}:${nameHash(name)}`;
@@ -171,6 +199,19 @@ export default async function handler(req, res) {
       return res.status(200).json({
         registered: pairs.filter((x, i) => accs[i] && accs[i].pinHash && accs[i].name === x.name).map(x => x.name)
       });
+    }
+
+    // ---- 寄せ書き：公開リンクから読む（本人に送るリンク。ログイン不要） ----
+    if (action === 'yg-view') {
+      const token = String(req.query.token || '');
+      if (!/^[a-f0-9]{24,}$/.test(token)) return res.status(400).json({ error: 'リンクが正しくありません' });
+      const t = await redisGet(`yg-token:${token}`);
+      if (!t) return res.status(404).json({ error: 'この寄せ書きは見つかりません' });
+      const cfg = await ygConfig(t.groupId);
+      const tg = cfg.targets[t.name];
+      if (!tg || !tg.released || tg.token !== token) return res.status(404).json({ error: 'この寄せ書きは今は公開されていません' });
+      const msgs = await ygMessages(t.groupId, t.name);
+      return res.status(200).json({ ok: true, name: t.name, messages: msgs.map(m => ({ from: m.from, text: m.text })) });
     }
 
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -264,6 +305,55 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
+    // ---- 寄せ書き：管理者の操作（対象の追加・公開・取り消し） ----
+    if (action === 'yg-admin') {
+      const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+      if (!ADMIN_PASSWORD) return res.status(500).json({ error: 'ADMIN_PASSWORD not configured' });
+      const { adminPassword, groupId, op, name } = body;
+      if (!safeEq(adminPassword || '', ADMIN_PASSWORD)) return res.status(401).json({ error: '管理者パスワードが違います' });
+      if (!groupId) return res.status(400).json({ error: 'missing fields' });
+      const cfg = await ygConfig(groupId);
+
+      if (op === 'schedule') {
+        const date = String(body.date || '');
+        if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ error: '日付の形が正しくありません' });
+        if (date) cfg.startAt = date; else delete cfg.startAt;
+        await redisSet(ygKey(groupId), cfg);
+      } else if (op && op !== 'list') {
+        if (!name) return res.status(400).json({ error: 'missing fields' });
+        if (op === 'add') {
+          const members = await getMembers(groupId);
+          if (!members.some(m => m.name === name)) return res.status(404).json({ error: 'グループにその名前が見つかりません' });
+          if (!cfg.targets[name]) cfg.targets[name] = { released: false, addedAt: new Date().toISOString() };
+          // 最初の対象を追加する時に開始日も一緒に決める（うっかり即公開にならないように）
+          const date = String(body.date || '');
+          if (!cfg.startAt && /^\d{4}-\d{2}-\d{2}$/.test(date)) cfg.startAt = date;
+        } else if (!cfg.targets[name]) {
+          return res.status(404).json({ error: '対象に入っていません' });
+        } else if (op === 'release') {
+          const tg = cfg.targets[name];
+          if (!tg.token) { tg.token = rand(16); await redisSet(`yg-token:${tg.token}`, { groupId, name }); }
+          tg.released = true; tg.releasedAt = new Date().toISOString();
+        } else if (op === 'unrelease') {
+          cfg.targets[name].released = false;
+        } else if (op === 'remove') {
+          if (cfg.targets[name].token) await redisDel(`yg-token:${cfg.targets[name].token}`);
+          delete cfg.targets[name];
+          await redisDel(ygMsgKey(groupId, name));   // 集まったメッセージも消える
+        } else {
+          return res.status(400).json({ error: 'unknown op' });
+        }
+        await redisSet(ygKey(groupId), cfg);
+      }
+
+      const list = [];
+      for (const [n, tg] of Object.entries(cfg.targets)) {
+        const count = Number(await redisCmd(['HLEN', ygMsgKey(groupId, n)])) || 0;
+        list.push({ name: n, released: !!tg.released, count, token: tg.released ? tg.token : null });
+      }
+      return res.status(200).json({ ok: true, targets: list, startAt: cfg.startAt || null, started: ygStarted(cfg) });
+    }
+
     // ---- ここから下はログイン必須 ----
     const cur = await currentSession();
     if (!cur) return res.status(401).json({ error: 'not logged in' });
@@ -272,6 +362,44 @@ export default async function handler(req, res) {
     if (action === 'logout') {
       await redisDel(`session:${token}`);
       clearCookie();
+      return res.status(200).json({ ok: true });
+    }
+
+    // ---- 寄せ書き：自分が書ける相手と、自分宛て（公開後のみ）を返す ----
+    if (action === 'yg-list') {
+      const cfg = await ygConfig(s.groupId);
+      const mineCfg = cfg.targets[acc.name];
+      // 自分が対象で未公開の間は、寄せ書きの存在そのものを見せない
+      if (mineCfg && !mineCfg.released) return res.status(200).json({ ok: true, targets: [], mine: null });
+      const members = await getMembers(s.groupId);
+      const targets = [];
+      for (const n of (ygStarted(cfg) ? Object.keys(cfg.targets) : [])) {
+        if (n === acc.name || !members.some(m => m.name === n)) continue;
+        const raw = await redisCmd(['HGET', ygMsgKey(s.groupId, n), acc.id]);
+        let myText = '';
+        try { if (raw) myText = JSON.parse(raw).text || ''; } catch (e) {}
+        targets.push({ name: n, myText });
+      }
+      let mine = null;
+      if (mineCfg && mineCfg.released) {
+        const msgs = await ygMessages(s.groupId, acc.name);
+        mine = { name: acc.name, releasedAt: mineCfg.releasedAt, messages: msgs.map(m => ({ from: m.from, text: m.text })) };
+      }
+      return res.status(200).json({ ok: true, targets, mine, startAt: targets.length ? (cfg.startAt || 'now') : null });
+    }
+
+    // ---- 寄せ書き：書く（1人につき1通。書き直すと上書き、空にすると取り消し） ----
+    if (action === 'yg-write') {
+      const target = String(body.target || '');
+      const text = String(body.text || '').trim().slice(0, 400);
+      const cfg = await ygConfig(s.groupId);
+      if (!cfg.targets[target]) return res.status(404).json({ error: 'この人は寄せ書きの対象ではありません' });
+      if (!ygStarted(cfg)) return res.status(403).json({ error: 'まだ受付前です' });
+      if (target === acc.name) return res.status(403).json({ error: '自分宛てには書けません' });
+      if (cfg.targets[acc.name] && !cfg.targets[acc.name].released) return res.status(403).json({ error: '今は書けません' });
+      if (!text) { await redisCmd(['HDEL', ygMsgKey(s.groupId, target), acc.id]); return res.status(200).json({ ok: true, deleted: true }); }
+      await redisCmd(['HSET', ygMsgKey(s.groupId, target), acc.id,
+        JSON.stringify({ from: acc.name, text, at: new Date().toISOString() })]);
       return res.status(200).json({ ok: true });
     }
 
