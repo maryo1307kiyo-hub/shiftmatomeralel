@@ -823,6 +823,17 @@
         <span style="font-size:11px;color:var(--muted);" id="myGroupDisplay"></span>
       </div>
 
+      <!-- 自分のシフト（シフターから直接取得） -->
+      <div class="px-card" style="margin-bottom:10px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div class="px-label">MY SHIFT</div>
+          <button class="btn-px btn-ghost btn-sm" onclick="myShiftLoad(true)">更新</button>
+        </div>
+        <div id="myShiftSummary" style="font-size:11px;color:var(--muted);margin:6px 0;"></div>
+        <div id="myShiftList" style="display:flex;flex-direction:column;gap:6px;"></div>
+        <button class="btn-px btn-ghost btn-sm" style="margin-top:10px;width:100%;" onclick="myShiftOpenCiftr()">シフターを開く ▶</button>
+      </div>
+
       <!-- ステータス -->
       <div class="px-card" style="margin-bottom:10px;">
         <div class="px-label">TODAY</div>
@@ -3436,9 +3447,79 @@ function showMypageMain(){
   document.getElementById('myGroupDisplay').textContent = 'グループ: ' + authMe.groupId;
   const me = members.find(m => m.name === authMe.name);
   const url = me ? me.url : authMe.url;
-  document.getElementById('myUrlDisplay').textContent = url ? maskCiftrUrl(url).replace(/^https?:\/\//,'') : '未登録';
+  const ud = document.getElementById('myUrlDisplay');
+  ud.textContent = url ? url.replace(/^https?:\/\//,'') : '未登録';
+  ud.style.wordBreak = 'break-all';
 
   loadMyRank();
+  myShiftLoad(false);
+}
+
+// ===== マイページ：自分のシフト =====
+// まず手元の一覧から即表示し、裏で自分の分だけシフターから取り直す
+function myShiftUrl(){
+  if(!authMe) return null;
+  const me = members.find(m => m.name === authMe.name);
+  return me ? me.url : authMe.url;
+}
+function myShiftOpenCiftr(){
+  const u = myShiftUrl();
+  if(!u){ showToast('シフターのリンクが登録されていません'); return; }
+  window.open(u, '_blank');
+}
+function myShiftRender(r, note){
+  const list = document.getElementById('myShiftList');
+  const sum = document.getElementById('myShiftSummary');
+  if(!list) return;
+  const today = new Date(Date.now() + 9*3600*1000).toISOString().slice(0,10);
+  const items = [];
+  for(const x of (r.shifts||[])) items.push({ ...x, kind:'ok' });
+  for(const x of (r.pendingShifts||[])) items.push({ ...x, kind:'pending' });
+  for(const x of (r.rejectedShifts||[])) items.push({ ...x, kind:'rejected' });
+  items.sort((a,b)=>a.date.localeCompare(b.date) || String(a.start||'').localeCompare(String(b.start||'')));
+
+  // 今月の確定シフトの回数と時間
+  const ym = today.slice(0,7);
+  let cnt = 0, mins = 0;
+  for(const x of (r.shifts||[])){
+    if(!x.date.startsWith(ym) || !x.start || !x.end) continue;
+    const [h1,m1] = x.start.split(':').map(Number), [h2,m2] = x.end.split(':').map(Number);
+    let d = (h2*60+m2) - (h1*60+m1); if(d < 0) d += 24*60;
+    cnt++; mins += d;
+  }
+  sum.textContent = `今月 ${cnt}回・${Math.floor(mins/60)}時間${mins%60 ? (mins%60)+'分' : ''}` + (note ? `　${note}` : '');
+
+  const upcoming = items.filter(x => x.date >= today);
+  if(!upcoming.length){ list.innerHTML = '<div style="font-size:12px;color:var(--muted);">これからのシフトはありません</div>'; return; }
+  list.innerHTML = upcoming.map(x => {
+    const d = new Date(x.date+'T00:00:00'), dow = d.getDay();
+    const col = dow===0 ? 'color:#e06c75' : dow===6 ? 'color:#61afef' : '';
+    const isToday = x.date === today;
+    const label = `<span style="min-width:72px;${col}">${d.getMonth()+1}/${d.getDate()}（${DAY[dow]}）</span>`;
+    const box = `display:flex;align-items:center;gap:8px;font-size:13px;padding:6px 8px;border:2px solid ${isToday?'var(--accent3)':'var(--border)'};`;
+    if(x.kind==='rejected') return `<div style="${box}opacity:.55;">${label}<span>👻 消えたシフト</span></div>`;
+    if(x.kind==='pending') return `<div style="${box}border-style:dashed;">${label}<span class="pill-label">申</span><span>${esc(x.start)}–${esc(x.end)}</span></div>`;
+    return `<div style="${box}">${label}<span style="font-weight:bold;">${esc(x.start)}–${esc(x.end)}</span>${isToday?'<span style="color:var(--accent3);font-size:11px;">今日</span>':''}</div>`;
+  }).join('');
+}
+async function myShiftLoad(force){
+  if(!authMe) return;
+  const list = document.getElementById('myShiftList');
+  const cached = (lastResults||[]).find(r => r.name === authMe.name);
+  if(cached && !force) myShiftRender(cached, '');
+  else if(list && !cached) list.innerHTML = '<div style="font-size:12px;color:var(--muted);">読み込み中...</div>';
+  const url = myShiftUrl();
+  if(!url){ if(list) list.innerHTML = '<div style="font-size:12px;color:var(--muted);">シフターのリンクが登録されていません</div>'; return; }
+  try{
+    const r = await fetch('/api/fetch-shift?url=' + encodeURIComponent(url));
+    const d = await r.json();
+    if(!r.ok || d.error) throw new Error(d.error || 'HTTP ' + r.status);
+    myShiftRender(d, '');
+    if(force) showToast('自分のシフトを更新しました');
+  }catch(e){
+    if(cached) myShiftRender(cached, '（シフターに繋がらないので前回の内容）');
+    else if(list) list.innerHTML = '<div style="font-size:12px;color:#e06c75;line-height:1.6;">シフターから取得できませんでした。<br>リンクの期限切れかもしれません。「シフターを開く」で確認してください</div>';
+  }
 }
 
 function authEditMyUrl(){
