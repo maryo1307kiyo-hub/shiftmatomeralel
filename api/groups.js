@@ -27,6 +27,24 @@ export default async function handler(req, res) {
     });
   }
 
+  async function redisDel(key) {
+    await fetch(`${UPSTASH_URL}/del/${encodeURIComponent(key)}`, {
+      method: 'POST', headers: { Authorization: `Bearer ${UPSTASH_TOKEN}` }
+    });
+  }
+
+  // シフターリンク → 「どのグループの誰か」の対応表（リンク＋PINログイン用。api/auth.js が読む）
+  // リンクの s= の値（無い旧型はパス）を鍵にする。ホスト名の違い（m.s1 / m-s1）は無視
+  function linkId(url) {
+    const s = String(url || '').match(/[?&]s=([A-Za-z0-9]+)/);
+    if (s) return 's:' + s[1];
+    const m = String(url || '').match(/^https?:\/\/[^\/]+(\/[^?#]*)/);
+    return m ? 'p:' + m[1].replace(/\/+$/, '').toLowerCase() : null;
+  }
+  const idxKey = (url) => { const id = linkId(url); return id ? `url-index:${id}` : null; };
+  async function idxSet(gid, m) { const k = idxKey(m.url); if (k) await redisSet(k, { groupId: gid, name: m.name }); }
+  async function idxDel(url) { const k = idxKey(url); if (k) await redisDel(k); }
+
   const { groupId, action } = req.query;
   if (!groupId) return res.status(400).json({ error: 'groupId required' });
 
@@ -34,6 +52,19 @@ export default async function handler(req, res) {
 
   if (req.method === 'GET') {
     const members = await redisGet(key);
+    // 既存メンバーの対応表を1回だけ作る（この機能が入る前に登録された人の分）
+    try {
+      if (members && members.length && !(await redisGet(`url-index-built:${groupId}`))) {
+        const cmds = members.map(m => [idxKey(m.url), m]).filter(x => x[0])
+          .map(([k, m]) => ['SET', k, JSON.stringify({ groupId, name: m.name })]);
+        cmds.push(['SET', `url-index-built:${groupId}`, '1']);
+        await fetch(`${UPSTASH_URL}/pipeline`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(cmds)
+        });
+      }
+    } catch (e) {}
     return res.status(200).json({ members: members || [] });
   }
 
@@ -46,14 +77,17 @@ export default async function handler(req, res) {
       if (!name || !url) return res.status(400).json({ error: 'name and url required' });
       if (!url.includes('ciftr.jp')) return res.status(403).json({ error: 'ciftr.jp only' });
       if (members.some(m => m.url === url)) return res.status(409).json({ error: 'already exists' });
+      if (members.some(m => m.name === name)) return res.status(409).json({ error: 'その名前は既に使われています' });
       members.push({ name, url });
       await redisSet(key, members);
+      try { await idxSet(groupId, { name, url }); } catch (e) {}
       return res.status(200).json({ members });
     }
 
     if (action === 'remove') {
       members = members.filter(m => m.url !== body.url);
       await redisSet(key, members);
+      try { await idxDel(body.url); } catch (e) {}
       return res.status(200).json({ members });
     }
 
@@ -67,6 +101,7 @@ export default async function handler(req, res) {
       members = members.map(m => m.url === url ? { ...m, name: newName } : m);
       await redisSet(key, members);
       // 個人アカウント（api/auth.js）の名前も追従させる。失敗しても改名自体は成立させる
+      try { if (before) await idxSet(groupId, { name: newName, url }); } catch (e) {}
       try {
         if (before && before.name !== newName) {
           const { createHash } = await import('node:crypto');
@@ -101,6 +136,7 @@ export default async function handler(req, res) {
       if (!target) return res.status(404).json({ error: 'member not found' });
       members = members.map(m => m.url === oldUrl ? { ...m, url: newUrl } : m);
       await redisSet(key, members);
+      try { await idxDel(oldUrl); await idxSet(groupId, { name: target.name, url: newUrl }); } catch (e) {}
       return res.status(200).json({ members, oldUrl, newUrl, name: target.name });
     }
   }
