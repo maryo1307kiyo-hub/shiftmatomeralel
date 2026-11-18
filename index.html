@@ -432,20 +432,20 @@
           </div>
           <div id="adminPanel" style="display:none;flex-direction:column;gap:10px;">
             <div style="font-size:12px;color:var(--accent3);">✓ 管理者認証済み</div>
-            <div style="font-size:11px;color:var(--muted);">リセットするメンバーを選択してください</div>
+            <div style="font-size:12px;color:var(--accent2);">PINのリセット</div>
+            <div style="font-size:11px;color:var(--muted);">PINを忘れた人を選んでください。次に開いたとき、その人はPINを決め直せます</div>
             <select id="adminMemberSelect" style="background:#080814;border:2px solid var(--muted);color:var(--text);font-family:inherit;font-size:14px;padding:8px;width:100%;outline:none;"></select>
-            <div style="font-size:11px;color:var(--muted);">リセットすると次回そのメンバーは再設定が必要になります</div>
-            <button class="btn-px btn-primary" style="background:var(--accent2);" onclick="adminResetPassword()">パスワードをリセット</button>
-            <button class="btn-px btn-primary" style="background:var(--accent2);" onclick="adminResetPin()">ログインPINをリセット</button>
+            <button class="btn-px btn-primary" style="background:var(--accent2);" onclick="adminResetPin()">PINをリセット</button>
             <div style="border-top:1px dashed var(--border);padding-top:10px;font-size:12px;color:var(--accent4);">寄せ書き</div>
-            <div style="font-size:11px;color:var(--muted);line-height:1.6;">上で選んだメンバーを対象にすると、本人以外のログイン済みメンバーのMENUに「寄せ書き」が出ます。本人には「公開する」を押すまで一切見えません。</div>
+            <div style="font-size:11px;color:var(--muted);line-height:1.6;">下で選んだメンバーを対象にすると、本人以外のログイン済みメンバーのMENUに「寄せ書き」が出ます。本人には「公開する」を押すまで一切見えません。</div>
             <div style="font-size:11px;color:var(--muted);">お知らせを出す日（この日より前は誰の画面にも出ません）</div>
             <div style="display:flex;gap:6px;">
               <input type="date" id="ygStartDate" value="2027-02-01" style="flex:1;font-size:16px;">
               <button class="btn-px btn-ghost btn-sm" onclick="ygAdmin('schedule')">日付を変更</button>
             </div>
             <div id="ygAdminState" style="font-size:11px;color:var(--accent4);"></div>
-            <button class="btn-px btn-ghost btn-sm" onclick="ygAdmin('add', document.getElementById('adminMemberSelect').value)">選んだメンバーを寄せ書きの対象にする</button>
+            <select id="ygMemberSelect" style="background:#080814;border:2px solid var(--accent4);color:var(--text);font-family:inherit;font-size:14px;padding:8px;width:100%;outline:none;"></select>
+            <button class="btn-px btn-ghost btn-sm" onclick="ygAdmin('add', document.getElementById('ygMemberSelect').value)">選んだメンバーを寄せ書きの対象にする</button>
             <div id="ygAdminList"></div>
             <button class="btn-px btn-red btn-sm" onclick="closeAdminPanel()">管理画面を閉じる</button>
           </div>
@@ -2072,150 +2072,29 @@ const DAY_JP=['日','月','火','水','木','金','土'];
 
 
 function openApplyMenu() {
-  if(!members.length){ showToast('メンバーが登録されていません'); return; }
-
-  // この端末の持ち主が既に分かってる（パスワード設定済み）なら一覧をスキップして即申請へ
-  const myName = getMyApplyName();
-  if(myName){
-    const me = members.find(m => m.name === myName);
-    if(me){ openApply(me.url, me.name); return; }
-    // メンバー名が変わった等で見つからない場合は一覧にフォールバック
+  // シフト申請はログインした本人だけ（PINが本人確認を兼ねる）
+  if(!authMe || authMe.groupId !== groupId){
+    showToast('シフト申請はログインが必要です。名前とPINで入ってください');
+    openMypage();
+    return;
   }
-
-  document.getElementById('applyTitle').textContent = 'シフト申請';
-  document.getElementById('applyOverlay').classList.remove('hidden');
-  showApplyScreen('applyMemberSelect');
-  const list = document.getElementById('applyMemberList');
-  list.innerHTML = members.map(m =>
-    `<button class="btn-px btn-ghost" onclick="openApply('${esc(m.url)}','${esc(m.name)}')" style="width:100%;text-align:left;padding:10px 12px;">${esc(m.name)}</button>`
-  ).join('');
-}
-
-function showApplyScreen(id) {
-  ['applyMemberSelect'].forEach(s => {
-    const el = document.getElementById(s);
-    if(el) el.style.display = 'none';
-  });
-  const target = document.getElementById(id);
-  if(target) target.style.display = 'flex';
-}
-
-async function openApply(url, name) {
-  // 申請ページのURLを決定：
-  // ・?s=xxx 形式 → bulk_edit（まとめて申請）を直接開く
-  // ・パス型（/staff/login/...）→ 登録URLをそのまま開く（ciftrトップの「まとめて申請」から進んでもらう）
+  const me = members.find(m => m.name === authMe.name);
+  const url = me ? me.url : authMe.url;
+  if(!url){ showToast('シフターのリンクが登録されていません'); return; }
   const sParam = url.match(/[?&]s=([^&]+)/)?.[1];
-  const applyTarget = sParam
-    ? `http://m.s1.ciftr.jp/shift/bulk_edit?s=${sParam}`
-    : url;
-
-  const pwKey = 'applyPw_' + groupId + '_' + name;
-
-  // 他人チェック
-  const myName = getMyApplyName();
-  if (myName && myName !== name) {
-    showToast(`このシフターは ${myName} さん専用です`);
-    return;
-  }
-
-  // ログイン済みの本人なら、申請用パスワードの設定は不要（アカウントが本人確認を兼ねる）
-  if (authMe && authMe.groupId === groupId && authMe.name === name) {
-    closeApply();
-    window.open(applyTarget, '_blank');
-    if (!sParam) showToast('ページ内の「まとめて申請」から申請してください');
-    return;
-  }
-
-  // サーバー側でリセットされてないか確認
-  try {
-    const r = await fetch(`/api/admin-shift?action=check-reset&groupId=${encodeURIComponent(groupId)}&name=${encodeURIComponent(name)}`);
-    const d = await r.json();
-    if (d.reset) {
-      // リセット済み→localStorageも消して初回設定に戻す
-      localStorage.removeItem(pwKey);
-      showToast('パスワードがリセットされました。再設定してください');
-    }
-  } catch(e) {}
-
-  const savedPw = localStorage.getItem(pwKey);
-  if (!savedPw) {
-    showApplyAuth(name, applyTarget);
-  } else {
-    closeApply();
-    window.open(applyTarget, '_blank');
-    if (!sParam) showToast('ページ内の「まとめて申請」から申請してください');
-  }
+  window.open(sParam ? `http://m.s1.ciftr.jp/shift/bulk_edit?s=${sParam}` : url, '_blank');
+  if(!sParam) showToast('ページ内の「まとめて申請」から申請してください');
 }
 
+// ログイン中の本人の名前（マイページのログイン画面で名前を選択済みにするのに使う）
 function getMyApplyName() {
-  // ログイン済みならアカウントの名前が最優先
-  if (authMe && authMe.groupId === groupId) return authMe.name;
-  // このスマホで設定済みの名前を探す
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (key && key.startsWith('applyPw_' + groupId + '_')) {
-      return key.replace('applyPw_' + groupId + '_', '');
-    }
-  }
-  return null;
+  return (authMe && authMe.groupId === groupId) ? authMe.name : null;
 }
 
-let _applyAuthTarget = null; // 認証後に開くURL（onclick属性のクォート事故防止のため変数渡し）
-
-function showApplyAuth(name, applyTarget) {
-  const old = document.getElementById('applyAuthDialog');
-  if (old) old.remove();
-  _applyAuthTarget = applyTarget;
-
-  const dialog = document.createElement('div');
-  dialog.id = 'applyAuthDialog';
-  dialog.style.cssText = 'position:fixed;inset:0;background:#00000099;z-index:600;display:flex;align-items:flex-end;';
-  dialog.innerHTML = `
-    <div style="background:var(--bg);border-top:2px solid var(--accent3);width:100%;padding:16px;display:flex;flex-direction:column;gap:12px;">
-      <div style="font-family:'Press Start 2P',monospace;font-size:8px;color:var(--accent3);">${esc(name)} のパスワード設定</div>
-      <div style="font-size:12px;color:var(--muted);">初回のみ：自分だけのパスワードを設定してください（次回から不要）</div>
-      <input type="password" id="authPw1" placeholder="パスワード（4文字以上）" style="background:#080814;border:2px solid var(--muted);color:var(--text);font-family:inherit;font-size:14px;padding:8px;width:100%;outline:none;">
-      <input type="password" id="authPw2" placeholder="確認入力" style="background:#080814;border:2px solid var(--muted);color:var(--text);font-family:inherit;font-size:14px;padding:8px;width:100%;outline:none;">
-      <button class="btn-px btn-primary" style="background:var(--accent3);" onclick="confirmApplyAuth('${esc(name)}')">設定してシフターを開く ▶</button>
-      <button class="btn-px btn-ghost btn-sm" onclick="document.getElementById('applyAuthDialog').remove()">キャンセル</button>
-    </div>`;
-  document.body.appendChild(dialog);
-  setTimeout(() => document.getElementById('authPw1')?.focus(), 100);
-}
-
-async function confirmApplyAuth(name) {
-  const pw1 = document.getElementById('authPw1')?.value || '';
-  const pw2 = document.getElementById('authPw2')?.value || '';
-  if (pw1.length < 4) { showToast('4文字以上で設定してください'); return; }
-  if (pw1 !== pw2) { showToast('パスワードが一致しません'); return; }
-  const pwKey = 'applyPw_' + groupId + '_' + name;
-  localStorage.setItem(pwKey, pw1);
-  // サーバー側のリセットフラグを消す
-  try { await fetch(`/api/admin-shift?action=clear-reset&groupId=${encodeURIComponent(groupId)}&name=${encodeURIComponent(name)}`); } catch(e) {}
-  document.getElementById('applyAuthDialog').remove();
-  closeApply();
-  if (_applyAuthTarget) {
-    const target = _applyAuthTarget;
-    _applyAuthTarget = null;
-    window.open(target, '_blank');
-    if (!target.includes('bulk_edit')) showToast('ページ内の「まとめて申請」から申請してください');
-    else showToast('設定しました！次回からパスワード不要です');
-  }
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// 旧・申請用パスワードの残りを端末から消す
+try{
+  Object.keys(localStorage).filter(k => k.startsWith('applyPw_')).forEach(k => localStorage.removeItem(k));
+}catch(e){}
 
 function closeApply() {
   document.getElementById('applyOverlay').classList.add('hidden');
@@ -2234,7 +2113,8 @@ function openAdminPanel(){
   adminPassword = pw;
   // メンバー一覧をセレクトに設定
   const sel = document.getElementById('adminMemberSelect');
-  sel.innerHTML = members.map(m => `<option value="${esc(m.name)}">${esc(m.name)}</option>`).join('');
+  sel.innerHTML = '<option value="">— 選ぶ —</option>' + members.map(m => `<option value="${esc(m.name)}">${esc(m.name)}</option>`).join('');
+  document.getElementById('ygMemberSelect').innerHTML = '<option value="">— 寄せ書きを送る人を選ぶ —</option>' + members.map(m => `<option value="${esc(m.name)}">${esc(m.name)}</option>`).join('');
   document.getElementById('adminLoginArea').style.display = 'none';
   document.getElementById('adminPanel').style.display = 'flex';
   ygAdmin('list');
@@ -2247,19 +2127,6 @@ function closeAdminPanel(){
   document.getElementById('adminLoginArea').style.display = 'flex';
 }
 
-async function adminResetPassword(){
-  const name = document.getElementById('adminMemberSelect').value;
-  if(!name){ showToast('メンバーを選択してください'); return; }
-  try{
-    const r = await fetch('/api/admin-shift', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ action:'reset', adminPassword, groupId, name })
-    });
-    const d = await r.json();
-    if(d.error){ showToast(d.error); return; }
-    showToast(`${name} のパスワードをリセットしました`);
-  }catch(e){ showToast('エラーが発生しました'); }
-}
 
 
 async function adminResetPin(){
@@ -3003,6 +2870,7 @@ async function ygOpenFromLink(token){
 // 管理者：対象の追加・公開・取り消し
 async function ygAdmin(op, name){
   if(!adminPassword) return;
+  if(op === 'add' && !name){ showToast('寄せ書きを送る人を選んでください'); return; }
   if(op === 'remove' && !confirm(`${name} さんを対象から外しますか？\n集まったメッセージも消えます`)) return;
   if(op === 'release' && !confirm(`${name} さんに寄せ書きを公開しますか？\n本人がアプリを開くと表示されます`)) return;
   try{
