@@ -3478,9 +3478,39 @@ gsRefreshResume();
   authInit();
 })();
 
+// ===== アプリ本体の更新チェック =====
+// ホーム画面に追加した人は再読み込みボタンが無いので、古い画面のまま残りやすい。
+// 開いた時・戻ってきた時にサーバーの最新版と番号を比べ、違えば自動で読み込み直す。
+const APP_BUILD = '2026-11-19a';   // ← index.html を更新するたびに変える
+let appCheckAt = 0;
+async function appUpdateCheck(){
+  if(Date.now() - appCheckAt < 60*1000) return;   // 1分に1回まで
+  appCheckAt = Date.now();
+  try{
+    const r = await fetch('/?build=' + Date.now(), { cache: 'no-store' });
+    const html = await r.text();
+    const m = html.match(/const APP_BUILD = '([^']+)'/);
+    if(!m || m[1] === APP_BUILD) return;
+    // 入力中・ゲーム中などは邪魔しないよう、何も開いていない時だけ自動で読み込み直す
+    const busy = document.activeElement && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
+    const overlayOpen =
+      ['ygOverlay','svOverlay','mypageModal','yrOverlay'].some(id => { const el = document.getElementById(id); return el && !el.classList.contains('hidden'); });
+    if(!busy && !overlayOpen){
+      let tries = 0;
+      try{ tries = Number(sessionStorage.getItem('appReloadTries')||0); }catch(e){}
+      if(tries < 2){ try{ sessionStorage.setItem('appReloadTries', String(tries+1)); }catch(e){} location.reload(); return; }
+    }
+    showToast('新しいバージョンがあります。画面を下に引っぱるか、開き直してください');
+  }catch(e){}
+}
+try{ sessionStorage.removeItem('appReloadTries'); }catch(e){}
+setTimeout(appUpdateCheck, 1500);
+
 // アプリに戻ってきた時（ホーム画面から再表示など）も最新を確認
 document.addEventListener('visibilitychange', ()=>{
-  if(document.visibilityState==='visible' && groupId && members.length){
+  if(document.visibilityState!=='visible') return;
+  appUpdateCheck();
+  if(groupId && members.length){
     bgRefresh(); // 30秒デバウンス付きなので連発しても安全
   }
 });
